@@ -21,7 +21,17 @@ exists only to point at it.
 
 ## Conventions
 
-- Conventional commits.
+- **Commits**: Conventional Commits, restricted to these 7 types
+  (anything else is rejected by release-please's `changelog-sections`):
+  - In changelog: `feat`, `fix`, `perf`
+  - Hidden: `docs`, `refactor`, `ci`, `chore`
+  - `feat` and `fix` are reserved for user-facing changes; tooling and
+    build changes are `ci` or `chore`.
+- **PR titles**: descriptive prose, **not** Conventional Commits format.
+  release-please reads conventional types from the commit log; mirroring
+  them in PR titles produces duplicate changelog entries on squash merge.
+- **Branches**: `feat/<topic>`, `fix/<topic>`, `ci/<topic>`, etc. Add a
+  `NNN-` prefix once we have a GitHub issue number to anchor to.
 - Rust formatting via `cargo fmt`; lint via `cargo clippy`.
 - No committed build artifacts; outputs land in `dist/` (gitignored).
 
