@@ -62,15 +62,17 @@ prefix handles anything novel.
       builds for `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`,
       and `x86_64-pc-windows-msvc` with SHA-256 checksums.
 - [x] Dependabot for `github-actions` and `cargo`.
-- [ ] `cargo init` with binary + library split (`ferrocv` bin,
-      `ferrocv-core` lib if useful for embedding later). When this
-      lands, switch `release-please-config.json` from
-      `release-type: simple` to `release-type: rust` so it bumps
-      `Cargo.toml` directly.
+- [x] Decide repo layout: **single crate** with `src/main.rs` +
+      `src/lib.rs`. Revisit (promote to workspace) if a second
+      consumer of the library emerges or we split out
+      `ferrocv-themes-*`.
+- [x] `cargo init` with binary + library split in a single `ferrocv`
+      crate. `release-please-config.json` flipped from
+      `release-type: simple` to `release-type: rust` so version bumps
+      target `Cargo.toml`.
 - [ ] Reserve names: register placeholders on
       [crates.io](https://crates.io/) and
       [npm](https://www.npmjs.com/) once there's enough to publish.
-- [ ] Decide repo layout (single crate vs workspace).
 
 ### Phase 1 — MVP: validate + render PDF
 - [ ] JSON Resume v1.0.0 schema bundled in-binary

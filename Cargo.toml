@@ -1,0 +1,21 @@
+[package]
+name = "ferrocv"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Render JSON Resume documents to PDF, HTML, and plain text via embedded Typst."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cacack/ferrocv"
+readme = "README.md"
+keywords = ["resume", "cv", "json-resume", "typst", "pdf"]
+categories = ["command-line-utilities"]
+
+[lib]
+name = "ferrocv"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ferrocv"
+path = "src/main.rs"
+
+[dependencies]
