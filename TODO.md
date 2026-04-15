@@ -73,6 +73,18 @@ prefix handles anything novel.
 - [ ] Reserve names: register placeholders on
       [crates.io](https://crates.io/) and
       [npm](https://www.npmjs.com/) once there's enough to publish.
+- [ ] CI "gate" aggregator job that depends on fmt/clippy/test/deny/
+      audit so branch protection can require a single check
+      (pattern from `gedcom-go`, `my-family`).
+- [ ] Test matrix: `{ubuntu, macOS, windows} × {stable, MSRV}`. We
+      ship binaries for all three OSes, so single-OS CI is a lie —
+      embedded Typst may have platform-specific font/PDF quirks.
+- [ ] [`crate-ci/typos`](https://github.com/crate-ci/typos) as a CI
+      step. High signal for a tool whose output *is* rendered text.
+- [ ] `make preflight` target (or `just preflight`) mirroring CI so
+      there's one local command before pushing.
+- [ ] Auto-rebase workflow for a semi-linear history on `main`
+      (pattern from `my-family`; excludes Dependabot).
 
 ### Phase 1 — MVP: validate + render PDF
 - [ ] JSON Resume v1.0.0 schema bundled in-binary
@@ -113,6 +125,34 @@ should support producing different outputs from the same source:
 - [ ] `--include-salary` / `--redact pii` toggles
 - [ ] Multiple themes per audience (govt application vs. standard
       resume vs. one-pager)
+
+## Pipeline & test follow-ups (gated on code existing)
+
+These are on the radar but not actionable against an empty crate.
+Activate as the relevant code lands. Surveyed from `gedcom-go` and
+`my-family`; filtered for fit.
+
+- [ ] **Coverage gating** via `cargo-llvm-cov` + Codecov. Per-package
+      thresholds with documented overrides (the `my-family`
+      `.testcoverage.yml` pattern is more maintainable than a single
+      global number). Activate with Phase 1.
+- [ ] **Nightly fuzzing** via `cargo-fuzz` targeting schema
+      validation and JSON Resume parsing. 2-minute budget per target
+      with crash artifacts retained; auto-file issue on failure
+      (`gedcom-go` / `my-family` pattern). Activate with Phase 1.
+- [ ] **`cargo-semver-checks`** on PR once there's a public library
+      API. Rust equivalent of `gedcom-go`'s `apidiff` gate; blocks
+      breaking changes that aren't marked with conventional-commit
+      `!:`. Activate once `ferrocv-core` has stable surface area
+      (Phase 4-ish).
+- [ ] **`cargo-dist`** (or `cargo-release`) for release artifacts.
+      The current handwritten release workflow is fine for now;
+      revisit if it becomes painful or once signing/attestations are
+      added.
+- [ ] **SBOM + sigstore attestations** for release artifacts
+      (CycloneDX/SPDX + cosign). Deferred: Constitution §6 already
+      marks reproducible/verifiable releases as aspirational. Explore
+      once there's a tagged release to sign.
 
 ## Open questions
 
