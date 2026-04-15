@@ -52,14 +52,25 @@ prefix handles anything novel.
 ## Phases
 
 ### Phase 0 — Project scaffolding
-- [ ] Pick license (MIT? Apache-2.0? dual?)
+- [x] Pick license — dual MIT/Apache-2.0 (Rust convention).
+- [x] CI baseline: GitHub Actions with SHA-pinned actions running
+      `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`,
+      `cargo-deny`, and `cargo-audit`. Jobs guard on `Cargo.toml`
+      existing so they go green until `cargo init` lands.
+- [x] Release pipeline: `release-please` (conventional commits) opens
+      release PRs on `main`; tagged releases trigger cross-platform
+      builds for `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`,
+      and `x86_64-pc-windows-msvc` with SHA-256 checksums.
+- [x] Dependabot for `github-actions` and `cargo`.
 - [ ] `cargo init` with binary + library split (`ferrocv` bin,
-      `ferrocv-core` lib if useful for embedding later)
-- [ ] CI: GitHub Actions for `cargo test`, `cargo clippy`, `cargo fmt`
+      `ferrocv-core` lib if useful for embedding later). When this
+      lands, switch `release-please-config.json` from
+      `release-type: simple` to `release-type: rust` so it bumps
+      `Cargo.toml` directly.
 - [ ] Reserve names: register placeholders on
       [crates.io](https://crates.io/) and
-      [npm](https://www.npmjs.com/) once there's enough to publish
-- [ ] Decide repo layout (single crate vs workspace)
+      [npm](https://www.npmjs.com/) once there's enough to publish.
+- [ ] Decide repo layout (single crate vs workspace).
 
 ### Phase 1 — MVP: validate + render PDF
 - [ ] JSON Resume v1.0.0 schema bundled in-binary
