@@ -5,8 +5,11 @@ Render [JSON Resume](https://jsonresume.org/) to PDF, HTML, and text via
 
 ## Status
 
-**Pre-implementation.** This repository holds the design notes and roadmap.
-See [`TODO.md`](./TODO.md) for the proposal and planned phases.
+**Pre-implementation.** Work is tracked as [GitHub
+issues](https://github.com/cacack/ferrocv/issues), organized into phase
+milestones. Tracking issues stand in for future phases until their scope
+is activated. The non-negotiable design principles live in
+[`CONSTITUTION.md`](./CONSTITUTION.md).
 
 ## Why
 
@@ -42,6 +45,9 @@ schema and replaces the rendering pipeline with something more robust:
   — Typst template that accepts JSON Resume data.
 - [`fantastic-cv`](https://typst.app/universe/package/fantastic-cv/)
   — Typst Universe template with a JSON Resume-shaped API.
+- [`basic-resume`](https://typst.app/universe/package/basic-resume/)
+  and [`modern-cv`](https://typst.app/universe/package/modern-cv/)
+  — Typst Universe resume templates we plan to ship adapters for.
 - [`jsonresume-renderer`](https://lib.rs/crates/jsonresume-renderer)
   — Rust CLI that renders JSON Resume via Tera templates (not Typst).
 - [`typst.ts`](https://github.com/Myriad-Dreamin/typst.ts) — proves Typst
