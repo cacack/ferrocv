@@ -1,0 +1,11 @@
+{
+  "basics": {
+    "name": "Ada Lovelace"
+  },
+  "skills": [
+    {
+      "name": "Programming",
+      "keywords": "should-be-an-array"
+    }
+  ]
+}

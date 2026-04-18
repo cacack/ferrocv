@@ -1,0 +1,10 @@
+{
+  "basics": {
+    "name": "Ada Lovelace"
+  },
+  "work": [
+    {
+      "name": 42
+    }
+  ]
+}

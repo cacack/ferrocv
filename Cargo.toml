@@ -26,6 +26,23 @@ name = "ferrocv"
 path = "src/main.rs"
 
 [dependencies]
+# CLI argument parsing. Derive API keeps the surface declarative.
+clap = { version = "4", features = ["derive"] }
+# JSON Schema validator. Default features pull in `reqwest` for remote
+# `$ref` resolution; we disable them to uphold CONSTITUTION.md §6
+# (no network calls at validate time) since our schema is vendored
+# and self-contained.
+jsonschema = { version = "0.46", default-features = false }
+# CLI-layer error propagation. Library code stays anyhow-free.
+anyhow = "1"
+serde_json = "1"
 
 [dev-dependencies]
 serde_json = "1"
+# Spawn the built `ferrocv` binary in integration tests to exercise real
+# CLI surface (exit codes, stdout/stderr, stdin). Dev-only — must not
+# leak into the shipped binary.
+assert_cmd = "2"
+# Readable substring / predicate assertions on captured stdout/stderr.
+# Paired with assert_cmd.
+predicates = "3"

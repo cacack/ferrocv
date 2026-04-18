@@ -1,6 +1,11 @@
 //! `ferrocv` renders JSON Resume documents to PDF, HTML, and plain text
 //! via embedded Typst. See `CONSTITUTION.md` for design principles.
 
+pub mod cli;
+pub mod validate;
+
+pub use validate::{ValidationError, validate_value};
+
 /// JSON Resume v1.0.0 schema, embedded at compile time.
 ///
 /// Per `CONSTITUTION.md` section 6.1, `ferrocv` makes no network calls at

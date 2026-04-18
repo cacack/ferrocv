@@ -33,6 +33,23 @@ schema and replaces the rendering pipeline with something more robust:
 - Define a native theme contract so new themes can target JSON Resume
   directly.
 
+## Usage
+
+The only subcommand available today is `validate`, which checks a
+document against the bundled JSON Resume v1.0.0 schema. Exits `0` on
+valid input, `1` on schema violations (diagnostics on stderr), and `2`
+on IO or JSON parse errors.
+
+```sh
+# From a file
+ferrocv validate resume.json
+
+# From stdin
+cat resume.json | ferrocv validate
+```
+
+No network is touched — the schema is compiled into the binary.
+
 ## Non-goals
 
 - Replacing the JSON Resume schema or project.
