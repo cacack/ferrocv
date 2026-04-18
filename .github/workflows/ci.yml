@@ -90,3 +90,24 @@ jobs:
           tool: cargo-audit
       - if: steps.detect.outputs.has_lock == 'true'
         run: cargo audit
+
+  # Aggregator gate: branch protection targets this single check instead of
+  # each upstream job. Add new jobs to `needs:` as they land (e.g. typos, #6).
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [fmt, clippy, test, deny, audit]
+    if: always()
+    steps:
+      - name: Check all jobs passed
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "Some jobs failed"
+            exit 1
+          fi
+          if [[ "${{ contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "Some jobs were cancelled"
+            exit 1
+          fi
+          echo "All CI jobs passed"
