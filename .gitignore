@@ -1,6 +1,7 @@
 /target
 /dist
 Cargo.lock.bak
+.prompts
 
 # Added by ggshield
 .cache_ggshield

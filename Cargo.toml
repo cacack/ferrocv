@@ -9,6 +9,13 @@ repository = "https://github.com/cacack/ferrocv"
 readme = "README.md"
 keywords = ["resume", "cv", "json-resume", "typst", "pdf"]
 categories = ["command-line-utilities"]
+include = [
+    "src/**/*",
+    "assets/schema/**/*",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE-*",
+]
 
 [lib]
 name = "ferrocv"
@@ -19,3 +26,6 @@ name = "ferrocv"
 path = "src/main.rs"
 
 [dependencies]
+
+[dev-dependencies]
+serde_json = "1"
