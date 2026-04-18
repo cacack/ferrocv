@@ -1,0 +1,40 @@
+{
+  "basics": {
+    "name": "Ada Lovelace",
+    "email": "ada@example.com",
+    "url": "https://example.com/ada",
+    "location": {
+      "city": "London",
+      "countryCode": "GB"
+    },
+    "profiles": [
+      {
+        "network": "GitHub",
+        "username": "ada",
+        "url": "https://github.example.com/ada"
+      }
+    ]
+  },
+  "work": [
+    {
+      "name": "Analytical Engines Ltd",
+      "position": "Programmer",
+      "startDate": "1843-01-01",
+      "endDate": "1852-11-27"
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of London",
+      "area": "Mathematics",
+      "studyType": "Self-directed"
+    }
+  ],
+  "skills": [
+    {
+      "name": "Programming",
+      "level": "Pioneer",
+      "keywords": ["Analytical Engine", "Algorithms"]
+    }
+  ]
+}
