@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/cacack/ferrocv/compare/v0.1.0...v0.2.0) (2026-04-19)
+
+
+### Features
+
+* **render:** add render subcommand with typst-jsonresume-cv theme ([3882d2a](https://github.com/cacack/ferrocv/commit/3882d2a9bbe37a7ff32fa51f5bad4980914fb11b)), closes [#12](https://github.com/cacack/ferrocv/issues/12) [#13](https://github.com/cacack/ferrocv/issues/13)
+* **render:** embed Typst crate for in-process PDF compilation ([c09c12c](https://github.com/cacack/ferrocv/commit/c09c12c32918a97cfa652a88fe2f4c32ede2983e))
+
+
+### Bug Fixes
+
+* **test:** normalize golden line endings for Windows CI ([d7a01cc](https://github.com/cacack/ferrocv/commit/d7a01cc769270c43f4947efae0053e6f8d7be586))
+
 ## 0.1.0 (2026-04-18)
 
 
