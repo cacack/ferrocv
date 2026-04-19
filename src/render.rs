@@ -1,9 +1,17 @@
 //! In-process Typst compilation to PDF.
 //!
-//! Wraps the embedded `typst` crate behind a small library surface:
-//! [`compile_pdf`] takes a Typst source string plus a JSON Resume
-//! [`serde_json::Value`], runs the real Typst compiler (no subprocess,
-//! no shell-out), and returns the produced PDF byte vector.
+//! Wraps the embedded `typst` crate behind a small library surface.
+//! Two public entry points:
+//!
+//! - [`compile_pdf`] — compile a single Typst source string against a
+//!   JSON Resume value. Intended for smoke tests, one-off rendering,
+//!   and callers who supply Typst source directly.
+//! - [`compile_theme`] — compile a [`crate::theme::Theme`] (a bundle
+//!   of Typst files shipped with `ferrocv`) against a JSON Resume
+//!   value. This is the path the CLI `render` subcommand uses.
+//!
+//! Both run the real Typst compiler in-process (no subprocess, no
+//! shell-out) and return the produced PDF byte vector.
 //!
 //! # Constitutional commitments
 //!
@@ -16,12 +24,14 @@
 //!   `PackageSpec` (i.e. `@preview/...` imports) returns
 //!   [`FileError::Package(PackageError::NotFound(_))`]. There is no
 //!   code path by which Typst can reach the network from inside
-//!   `compile_pdf`. A test in `tests/render.rs` enforces this.
+//!   `compile_pdf` or `compile_theme`. A test in `tests/render.rs`
+//!   enforces this.
 //! - **§6.4 — Themes run under Typst's native sandbox, nothing more.**
 //!   We do not add filesystem-wide access, shell-escape, or any
-//!   custom capabilities. The World exposes exactly two virtual files:
-//!   the user-supplied `main.typ` source, and `/resume.json`
-//!   containing the user-supplied JSON Resume bytes.
+//!   custom capabilities. The World exposes exactly the virtual
+//!   files the caller registers plus the always-present
+//!   `/resume.json` slot wired to the caller-supplied JSON Resume
+//!   bytes.
 //!
 //! # Fonts
 //!
@@ -43,9 +53,8 @@
 //! # Library only
 //!
 //! This module knows nothing about clap, files, stdin, or exit codes.
-//! Those concerns live in `crate::cli`. The CLI mapping for
-//! [`RenderError`] will land alongside the `render` subcommand
-//! (issue #13).
+//! Those concerns live in `crate::cli`.
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::OnceLock;
 
@@ -59,7 +68,9 @@ use typst::utils::LazyHash;
 use typst::{Library, World};
 use typst_pdf::PdfOptions;
 
-/// Virtual path of the main Typst source file inside the World.
+use crate::theme::Theme;
+
+/// Virtual path of the single-file source that [`compile_pdf`] serves.
 const MAIN_PATH: &str = "/main.typ";
 /// Virtual path the JSON Resume bytes are served under. Typst sources
 /// reach them via `json("/resume.json")`.
@@ -123,7 +134,7 @@ impl fmt::Display for RenderError {
 
 impl std::error::Error for RenderError {}
 
-/// Compile a Typst document to PDF bytes, in-process.
+/// Compile a single Typst source string to PDF bytes, in-process.
 ///
 /// `source` is a complete Typst document. `data` is the JSON Resume
 /// document; the source can read it via `json("/resume.json")` (the
@@ -134,20 +145,47 @@ impl std::error::Error for RenderError {}
 /// `%PDF-`. On failure, returns [`RenderError`] with one or more
 /// diagnostics describing what the compiler rejected.
 ///
+/// Convenience wrapper around [`compile_theme`]: builds a World whose
+/// only theme file is `source` registered at `/main.typ`.
+///
 /// # Warnings
 ///
 /// Non-fatal Typst warnings are **discarded**; only errors surface.
-/// See the module-level documentation for the rationale and the
-/// future direction.
+/// See the module-level documentation for the rationale.
 pub fn compile_pdf(source: &str, data: &Value) -> Result<Vec<u8>, RenderError> {
-    let world = FerrocvWorld::new(source, data);
+    let world = FerrocvWorld::from_single_source(source, data);
+    render_world(&world)
+}
 
+/// Compile a [`Theme`] bundle to PDF bytes against a JSON Resume
+/// value.
+///
+/// Every `(virtual_path, bytes)` pair in `theme.files` is registered
+/// in the World. Typst starts compilation from `theme.entrypoint`;
+/// relative imports inside theme sources resolve against the
+/// entrypoint's virtual directory, which is why it's the caller's
+/// responsibility to register all referenced files under a shared
+/// prefix (see `crate::theme` for the convention).
+///
+/// On success, the returned vector starts with the PDF magic bytes
+/// `%PDF-`. On failure, returns [`RenderError`] with one or more
+/// diagnostics describing what the compiler rejected — e.g. a
+/// reference to a field the supplied `data` does not carry, or a
+/// `@preview/...` import that the World refuses to resolve
+/// (CONSTITUTION §6.1).
+pub fn compile_theme(theme: &Theme, data: &Value) -> Result<Vec<u8>, RenderError> {
+    let world = FerrocvWorld::from_theme(theme, data);
+    render_world(&world)
+}
+
+/// Shared compile + PDF-serialize path used by both entry points.
+fn render_world(world: &FerrocvWorld) -> Result<Vec<u8>, RenderError> {
     // `typst::compile` returns Warned { output, warnings }. Drop
     // warnings — see module doc for rationale.
     let Warned {
         output,
         warnings: _,
-    } = typst::compile::<PagedDocument>(&world);
+    } = typst::compile::<PagedDocument>(world);
     let document = output.map_err(diagnostics_to_error)?;
 
     // Serialize to PDF. `typst_pdf::pdf` can also emit diagnostics
@@ -186,29 +224,82 @@ impl AsSourceDiagnostic for typst::diag::SourceDiagnostic {
     }
 }
 
-/// The [`World`] implementation that backs [`compile_pdf`].
+/// The [`World`] implementation that backs [`compile_pdf`] and
+/// [`compile_theme`].
 ///
 /// One concrete struct, no trait objects, no builder. Holds:
-/// - `main` — interned [`FileId`] for the user-supplied source.
-/// - `resume_id` — interned [`FileId`] for the served `/resume.json`.
-/// - `source` — the parsed [`Source`] for the main file.
+/// - `entrypoint` — interned [`FileId`] for the entrypoint source.
+/// - `entrypoint_source` — the parsed [`Source`] for the entrypoint.
+/// - `resume_id` — interned [`FileId`] for `/resume.json`.
 /// - `resume_bytes` — the JSON Resume bytes Typst will read via
 ///   `json("/resume.json")`.
+/// - `theme_files` — a map from every other theme file's [`FileId`]
+///   to its raw bytes. Typst hits this map for every non-entrypoint
+///   theme import.
 ///
 /// Fonts and the standard library are stored in process-wide
 /// [`OnceLock`]s because they are immutable and expensive to build.
 struct FerrocvWorld {
-    main: FileId,
+    entrypoint: FileId,
+    entrypoint_source: Source,
     resume_id: FileId,
-    source: Source,
     resume_bytes: Bytes,
+    theme_files: HashMap<FileId, Bytes>,
 }
 
 impl FerrocvWorld {
-    fn new(source_text: &str, data: &Value) -> Self {
-        let main = FileId::new(None, VirtualPath::new(MAIN_PATH));
+    /// Build a World whose only theme file is a single inline source
+    /// registered at [`MAIN_PATH`].
+    fn from_single_source(source_text: &str, data: &Value) -> Self {
+        let entrypoint = FileId::new(None, VirtualPath::new(MAIN_PATH));
+        let entrypoint_source = Source::new(entrypoint, source_text.to_owned());
+        Self::assemble(entrypoint, entrypoint_source, HashMap::new(), data)
+    }
+
+    /// Build a World from a [`Theme`] bundle.
+    ///
+    /// Every file in `theme.files` is interned as a [`FileId`] and
+    /// stored in the byte map, except the entrypoint itself which is
+    /// additionally parsed into a [`Source`] (Typst needs a parsed
+    /// `Source` for the main file — see [`World::main`]).
+    fn from_theme(theme: &Theme, data: &Value) -> Self {
+        let entrypoint = FileId::new(None, VirtualPath::new(theme.entrypoint));
+        let mut theme_files: HashMap<FileId, Bytes> = HashMap::with_capacity(theme.files.len());
+        let mut entrypoint_text: Option<String> = None;
+
+        for (path, bytes) in theme.files {
+            let id = FileId::new(None, VirtualPath::new(path));
+            // The entrypoint gets parsed into a Source below. We also
+            // keep its bytes in the map so a `file()` lookup works
+            // (Typst occasionally reads the main file as raw bytes
+            // for, e.g., span reporting; costs nothing to populate).
+            if id == entrypoint {
+                // UTF-8 is a hard requirement for any `.typ` file
+                // Typst can parse. An invalid-UTF-8 theme source is
+                // a packaging bug; panic is the right response.
+                let text = std::str::from_utf8(bytes)
+                    .expect("theme entrypoint must be valid UTF-8 Typst source")
+                    .to_owned();
+                entrypoint_text = Some(text);
+            }
+            theme_files.insert(id, Bytes::new(bytes.to_vec()));
+        }
+
+        let text = entrypoint_text.expect("Theme.entrypoint must appear as a key in Theme.files");
+        let entrypoint_source = Source::new(entrypoint, text);
+
+        Self::assemble(entrypoint, entrypoint_source, theme_files, data)
+    }
+
+    /// Common tail of both constructors — wires the `/resume.json`
+    /// slot from `data` and returns the assembled World.
+    fn assemble(
+        entrypoint: FileId,
+        entrypoint_source: Source,
+        theme_files: HashMap<FileId, Bytes>,
+        data: &Value,
+    ) -> Self {
         let resume_id = FileId::new(None, VirtualPath::new(RESUME_JSON_PATH));
-        let source = Source::new(main, source_text.to_owned());
         // `serde_json::to_vec` is infallible for `Value` — the Value
         // tree by construction never fails to serialize. Unwrap is
         // an invariant assertion, not a possible Typst behavior.
@@ -216,10 +307,11 @@ impl FerrocvWorld {
             serde_json::to_vec(data).expect("serde_json::Value must always serialize to bytes");
         let resume_bytes = Bytes::new(bytes);
         Self {
-            main,
+            entrypoint,
+            entrypoint_source,
             resume_id,
-            source,
             resume_bytes,
+            theme_files,
         }
     }
 }
@@ -255,16 +347,24 @@ impl World for FerrocvWorld {
     }
 
     fn main(&self) -> FileId {
-        self.main
+        self.entrypoint
     }
 
     fn source(&self, id: FileId) -> FileResult<Source> {
-        if id == self.main {
-            return Ok(self.source.clone());
+        if id == self.entrypoint {
+            return Ok(self.entrypoint_source.clone());
         }
-        // Reject any package-rooted source request. CONSTITUTION §6.1.
+        // §6.1: package-rooted imports are rejected at the World
+        // layer. No package resolver, no network call.
         if let Some(spec) = id.package() {
             return Err(FileError::Package(PackageError::NotFound(spec.clone())));
+        }
+        // Theme files: parse on demand. Caching is deferred (§5) —
+        // a fresh `Source` per lookup is cheap enough for Phase 1.
+        if let Some(bytes) = self.theme_files.get(&id) {
+            let text = std::str::from_utf8(bytes.as_slice())
+                .map_err(|_| FileError::NotFound(id.vpath().as_rootless_path().into()))?;
+            return Ok(Source::new(id, text.to_owned()));
         }
         Err(FileError::NotFound(id.vpath().as_rootless_path().into()))
     }
@@ -273,11 +373,14 @@ impl World for FerrocvWorld {
         if id == self.resume_id {
             return Ok(self.resume_bytes.clone());
         }
-        // Same package-rejection rule as `source`. Anything claiming
-        // to be inside a `@preview/...` package is a network request
-        // we refuse to make.
+        // §6.1: same package-rejection rule as `source`. Anything
+        // claiming to be inside a `@preview/...` package is a network
+        // request we refuse to make.
         if let Some(spec) = id.package() {
             return Err(FileError::Package(PackageError::NotFound(spec.clone())));
+        }
+        if let Some(bytes) = self.theme_files.get(&id) {
+            return Ok(bytes.clone());
         }
         Err(FileError::NotFound(id.vpath().as_rootless_path().into()))
     }

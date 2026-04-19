@@ -1,0 +1,93 @@
+{
+  "meta": {
+    "language": "en"
+  },
+  "basics": {
+    "name": "Ada Lovelace",
+    "label": "Computing Pioneer",
+    "email": "ada@example.com",
+    "phone": "+44-20-0000-0000",
+    "url": "https://example.com/ada",
+    "summary": "Mathematician and writer, chiefly known for her work on Charles Babbage's proposed mechanical general-purpose computer, the Analytical Engine.",
+    "location": {
+      "address": "St James's Square",
+      "postalCode": "SW1Y 4LB",
+      "city": "London",
+      "region": "England",
+      "countryCode": "GB"
+    },
+    "profiles": [
+      {
+        "network": "GitHub",
+        "username": "ada",
+        "url": "https://github.example.com/ada"
+      },
+      {
+        "network": "LinkedIn",
+        "username": "ada-lovelace",
+        "url": "https://linkedin.example.com/in/ada-lovelace"
+      }
+    ]
+  },
+  "work": [
+    {
+      "name": "Analytical Engines Ltd",
+      "position": "Programmer",
+      "url": "https://analytical.example.com",
+      "startDate": "1843-01-01",
+      "endDate": "1852-11-27",
+      "summary": "Translated and annotated Menabrea's paper on the Analytical Engine; wrote the first published algorithm intended for machine execution.",
+      "highlights": [
+        "Published the first algorithm designed for a machine (Bernoulli numbers)",
+        "Introduced the concept of a general-purpose computing device"
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "Notes on the Analytical Engine",
+      "description": "Expanded translation of Menabrea's sketch, including the first published algorithm for a computing machine.",
+      "startDate": "1842-01-01",
+      "endDate": "1843-07-01",
+      "highlights": [
+        "Note G — the Bernoulli-number algorithm"
+      ],
+      "url": "https://example.com/notes-g"
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of London",
+      "area": "Mathematics",
+      "studyType": "Self-directed",
+      "startDate": "1833-01-01",
+      "endDate": "1843-01-01"
+    }
+  ],
+  "skills": [
+    {
+      "name": "Programming",
+      "level": "Pioneer",
+      "keywords": ["Analytical Engine", "Algorithms"]
+    },
+    {
+      "name": "Mathematics",
+      "level": "Expert",
+      "keywords": ["Calculus", "Symbolic logic"]
+    }
+  ],
+  "interests": [
+    {
+      "name": "Poetical Science",
+      "keywords": ["Imagination", "Mathematics"]
+    }
+  ],
+  "certificates": [
+    {
+      "name": "Honorary Fellowship in Computing History",
+      "date": "1843-09-01",
+      "issuer": "Analytical Engines Ltd",
+      "url": "https://example.com/cert"
+    }
+  ]
+}

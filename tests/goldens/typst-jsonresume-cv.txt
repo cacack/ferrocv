@@ -1,0 +1,25 @@
+Ada Lovelaceada@example.com  |  +44-20-0000-0000  |  London, England  |
+https://github.example.com/ada  |  https://linkedin.example.com/in/ada-lovelace  |
+https://example.com/ada
+WORK EXPERIENCE
+Analytical Engines Ltd Jan 1843  —  Nov 1852
+Programmer• Published the first algorithm designed for a machine (Bernoulli numbers)
+• Introduced the concept of a general-purpose computing device
+
+PROJECTS
+Notes on the Analytical Engine Jan 1842  —  Jul 1843
+https://example.com/notes-g
+• Note G — the Bernoulli-number algorithm
+
+EDUCATION
+University of London Jan 1843
+Self-directed, Mathematics
+
+CERTIFICATIONS, SKILLS & INTERESTS
+• Certifications : Honorary Fellowship in Computing History
+
+• Programming : Analytical Engine, Algorithms
+
+• Mathematics : Calculus, Symbolic logic
+
+• Interests : Poetical Science

@@ -12,6 +12,7 @@ categories = ["command-line-utilities"]
 include = [
     "src/**/*",
     "assets/schema/**/*",
+    "assets/themes/**/*",
     "Cargo.toml",
     "README.md",
     "LICENSE-*",
@@ -58,3 +59,11 @@ assert_cmd = "2"
 # Readable substring / predicate assertions on captured stdout/stderr.
 # Paired with assert_cmd.
 predicates = "3"
+# PDF text extraction for golden-file theme tests. Normalized text
+# is stable across Typst patch versions where raw PDF bytes are
+# not. Dev-dep only — never linked into the shipped binary.
+# (Crates.io has no 0.7.x; 0.10 is the current 0.x at the time of
+# this commit.)
+pdf-extract = "0.10"
+# Temp output dirs for render-CLI scenario tests.
+tempfile = "3"

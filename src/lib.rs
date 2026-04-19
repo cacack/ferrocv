@@ -3,9 +3,11 @@
 
 pub mod cli;
 pub mod render;
+pub mod theme;
 pub mod validate;
 
-pub use render::{RenderDiagnostic, RenderError, compile_pdf};
+pub use render::{RenderDiagnostic, RenderError, compile_pdf, compile_theme};
+pub use theme::{THEMES, Theme, find_theme};
 pub use validate::{ValidationError, validate_value};
 
 /// JSON Resume v1.0.0 schema, embedded at compile time.
