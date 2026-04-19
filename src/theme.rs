@@ -246,8 +246,12 @@ pub const TEXT_MINIMAL: Theme = Theme {
 /// and CONSTITUTION §5 calls for the narrower solution until a caller
 /// actually needs more. See the module doc as well for the §4
 /// deferral on splitting native themes into their own module.
-pub const THEMES: &[&Theme] =
-    &[&TYPST_JSONRESUME_CV, &FANTASTIC_CV, &MODERN_CV, &TEXT_MINIMAL];
+pub const THEMES: &[&Theme] = &[
+    &TYPST_JSONRESUME_CV,
+    &FANTASTIC_CV,
+    &MODERN_CV,
+    &TEXT_MINIMAL,
+];
 
 /// Look up a [`Theme`] by name. Returns `None` for unknown names.
 ///
