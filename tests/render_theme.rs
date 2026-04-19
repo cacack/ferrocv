@@ -110,6 +110,27 @@ fn fantastic_cv_renders_grace_hopper_sparse_to_expected_text() {
     );
 }
 
+// modern-cv adapter goldens.
+#[test]
+fn modern_cv_renders_ada_lovelace_to_expected_text() {
+    run_golden(
+        "modern-cv",
+        "tests/fixtures/render_full.json",
+        "tests/goldens/modern-cv.txt",
+        "Ada Lovelace",
+    );
+}
+
+#[test]
+fn modern_cv_renders_grace_hopper_sparse_to_expected_text() {
+    run_golden(
+        "modern-cv",
+        "tests/fixtures/render_sparse.json",
+        "tests/goldens/modern-cv-sparse.txt",
+        "Grace Hopper",
+    );
+}
+
 /// Shared golden-file workflow: compile the named adapter against the
 /// named fixture, extract and normalize the PDF text, and compare
 /// against (or rewrite, under `UPDATE_GOLDEN`) the committed golden.

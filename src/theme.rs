@@ -31,11 +31,12 @@
 //!
 //! # Why a static slice, not a `HashMap` or `ThemeRegistry`
 //!
-//! Phase 2 ships with three themes total. A linear scan over `THEMES`
-//! is O(n) for n ≤ 3. CONSTITUTION §5 ("simple now, iterate later")
-//! calls for the narrower solution here; generalizing to a hashed
-//! lookup or a builder pattern should wait for a second caller that
-//! actually needs it.
+//! Phase 2 ships four themes total: three adapters
+//! (`typst-jsonresume-cv`, `fantastic-cv`, `modern-cv`) and one native
+//! theme (`text-minimal`). A linear scan over `THEMES` is O(n) for
+//! small n; CONSTITUTION §5 ("simple now, iterate later") calls for
+//! the narrower solution here. Generalizing to a hashed lookup or a
+//! builder pattern should wait for a caller that actually needs it.
 
 /// A themed Typst source bundle that [`crate::render::compile_theme`]
 /// can compile against a JSON Resume document.
@@ -74,6 +75,13 @@ const TYPST_JSONRESUME_CV_PREFIX: &str = "/themes/typst-jsonresume-cv";
 /// fields stay in lockstep. If this prefix changes, every file path
 /// in [`FANTASTIC_CV`] updates in one place.
 const FANTASTIC_CV_PREFIX: &str = "/themes/fantastic-cv";
+
+/// Virtual-path prefix for this theme's files inside the World.
+///
+/// Centralized as a private `const` so the `files` and `entrypoint`
+/// fields stay in lockstep. If this prefix changes, every file path
+/// in [`MODERN_CV`] updates in one place.
+const MODERN_CV_PREFIX: &str = "/themes/modern-cv";
 
 /// Adapter for [`fruggiero/typst-jsonresume-cv`]'s `basic-resume`
 /// theme, vendored under `assets/themes/typst-jsonresume-cv/`.
@@ -144,6 +152,40 @@ const _: () = {
     assert!(!FANTASTIC_CV_PREFIX.is_empty());
 };
 
+/// Adapter for [`DeveloperPaul123/modern-cv`] (canonical:
+/// `ptsouchlos/modern-cv`), vendored under `assets/themes/modern-cv/`.
+///
+/// Unlike [`FANTASTIC_CV`] (which is a pure glue-only vendor — the
+/// upstream source is byte-for-byte unchanged), this adapter ships a
+/// **patched** `lib.typ`: the upstream pulls `@preview/fontawesome`
+/// and `@preview/linguify` at compile time, which CONSTITUTION §6.1
+/// forbids. All icon and i18n call sites were rewritten; see
+/// `assets/themes/modern-cv/VENDORING.md` for the patch record.
+/// The entrypoint is our authored glue `resume.typ`, which imports
+/// the patched `lib.typ` from the same virtual directory.
+///
+/// [`DeveloperPaul123/modern-cv`]: https://github.com/DeveloperPaul123/modern-cv
+pub const MODERN_CV: Theme = Theme {
+    name: "modern-cv",
+    files: &[
+        (
+            // Must agree with MODERN_CV_PREFIX + "/lib.typ".
+            concat!("/themes/modern-cv", "/lib.typ"),
+            include_bytes!("../assets/themes/modern-cv/lib.typ"),
+        ),
+        (
+            concat!("/themes/modern-cv", "/resume.typ"),
+            include_bytes!("../assets/themes/modern-cv/resume.typ"),
+        ),
+    ],
+    entrypoint: concat!("/themes/modern-cv", "/resume.typ"),
+};
+
+// Compile-time sanity check: same shape as for TYPST_JSONRESUME_CV.
+const _: () = {
+    assert!(!MODERN_CV_PREFIX.is_empty());
+};
+
 /// Virtual path of the `text-minimal` theme's entrypoint.
 ///
 /// Single per-file constant used by both the [`Theme::files`] key and
@@ -197,19 +239,20 @@ pub const TEXT_MINIMAL: Theme = Theme {
 
 /// All themes registered with this build of `ferrocv`.
 ///
-/// Phase 2 ships two adapters (`typst-jsonresume-cv`, `fantastic-cv`)
-/// and one native theme (`text-minimal`). See the module doc for why
-/// this is a `&[&Theme]` rather than a `HashMap` or a builder
-/// pattern — a linear scan over a handful of entries is fine, and
-/// CONSTITUTION §5 calls for the narrower solution until a caller
+/// Phase 2 ships three adapters (`typst-jsonresume-cv`, `fantastic-cv`,
+/// `modern-cv`) and one native theme (`text-minimal`). See the module
+/// doc for why this is a `&[&Theme]` rather than a `HashMap` or a
+/// builder pattern — a linear scan over a handful of entries is fine,
+/// and CONSTITUTION §5 calls for the narrower solution until a caller
 /// actually needs more. See the module doc as well for the §4
 /// deferral on splitting native themes into their own module.
-pub const THEMES: &[&Theme] = &[&TYPST_JSONRESUME_CV, &FANTASTIC_CV, &TEXT_MINIMAL];
+pub const THEMES: &[&Theme] =
+    &[&TYPST_JSONRESUME_CV, &FANTASTIC_CV, &MODERN_CV, &TEXT_MINIMAL];
 
 /// Look up a [`Theme`] by name. Returns `None` for unknown names.
 ///
-/// Linear scan over [`THEMES`]; O(n) for n themes. Acceptable for
-/// the current n ≤ 3 regime (CONSTITUTION §5).
+/// Linear scan over [`THEMES`]; O(n) for n themes. Acceptable for the
+/// current handful of entries (CONSTITUTION §5).
 pub fn find_theme(name: &str) -> Option<&'static Theme> {
     THEMES.iter().copied().find(|t| t.name == name)
 }
