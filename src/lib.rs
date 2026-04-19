@@ -6,7 +6,9 @@ pub mod render;
 pub mod theme;
 pub mod validate;
 
-pub use render::{RenderDiagnostic, RenderError, compile_pdf, compile_text, compile_theme};
+pub use render::{
+    RenderDiagnostic, RenderError, compile_html, compile_pdf, compile_text, compile_theme,
+};
 pub use theme::{THEMES, Theme, find_theme};
 pub use validate::{ValidationError, validate_value};
 

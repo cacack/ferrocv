@@ -205,7 +205,7 @@ fn render_rejects_unknown_format_with_exit_two() {
 
     // clap's ValueEnum mismatch exits 2 before we reach any of our code.
     // `xml` stands in for "any format we don't ship"; `html` was the
-    // previous canary but is reserved for #44 and may land soon.
+    // pre-#44 canary, now a valid format, so `xml` is the replacement.
     ferrocv()
         .arg("render")
         .arg(fixture("render_full"))
@@ -395,4 +395,199 @@ fn render_accepts_resume_on_stdin() {
 
     assert!(out.exists());
     assert_eq!(read_prefix(&out, 5), b"%PDF-");
+}
+
+// --- HTML format scenarios ---------------------------------------------
+//
+// Mirror the PDF and text scenarios above for `--format html`. HTML is
+// Typst's upstream-experimental export, so assertions stay loose —
+// exact byte shape is guaranteed to churn across Typst minors. The
+// full-document well-formedness check (DOCTYPE presence, no external
+// references, etc.) lives in `tests/render_html.rs`.
+
+#[test]
+fn render_writes_html_to_output_path() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.html");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg("text-minimal")
+        .arg("--format")
+        .arg("html")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    let body = std::fs::read_to_string(&out).expect("HTML output must be UTF-8");
+    assert!(
+        body.starts_with("<!DOCTYPE html>"),
+        "HTML output must begin with the DOCTYPE declaration; got first 80 bytes: {:?}",
+        body.chars().take(80).collect::<String>(),
+    );
+    assert!(
+        body.contains("Ada Lovelace"),
+        "HTML output must contain the rendered name; got {} bytes",
+        body.len(),
+    );
+}
+
+#[test]
+fn render_html_uses_text_minimal_when_theme_omitted() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.html");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--format")
+        .arg("html")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    let body = std::fs::read_to_string(&out).expect("HTML output must be UTF-8");
+    assert!(
+        body.contains("Ada Lovelace"),
+        "HTML output must contain the rendered name"
+    );
+}
+
+#[test]
+fn render_html_default_output_path_is_dist_resume_html() {
+    // No `--output`, no `--theme`. `current_dir` is set to a tempdir so
+    // the default `dist/resume.html` lands under the temp tree rather
+    // than polluting the workspace.
+    let tmp = tempfile::tempdir().expect("tempdir");
+
+    ferrocv()
+        .current_dir(tmp.path())
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--format")
+        .arg("html")
+        .assert()
+        .success();
+
+    let expected = tmp.path().join("dist/resume.html");
+    assert!(
+        expected.exists(),
+        "default HTML output must land at <cwd>/dist/resume.html; expected {}",
+        expected.display()
+    );
+}
+
+#[test]
+fn render_html_rejects_invalid_resume_with_exit_one() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.html");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("invalid_wrong_type_email"))
+        .arg("--format")
+        .arg("html")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("/basics/email"));
+
+    assert!(
+        !out.exists(),
+        "no output file should be written when validation fails",
+    );
+}
+
+#[test]
+fn render_html_accepts_resume_on_stdin() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.html");
+    let input =
+        std::fs::read_to_string(fixture("render_full")).expect("fixture `render_full.json`");
+
+    ferrocv()
+        .arg("render")
+        .arg("--format")
+        .arg("html")
+        .arg("--output")
+        .arg(&out)
+        .write_stdin(input)
+        .assert()
+        .success();
+
+    assert!(out.exists());
+    let body = std::fs::read_to_string(&out).expect("HTML output must be UTF-8");
+    assert!(
+        body.contains("Ada Lovelace"),
+        "HTML output must contain the rendered name"
+    );
+}
+
+/// Adapter HTML happy-path: `fantastic-cv` was fixed for HTML
+/// compatibility in #59 (empty-URL guard); verify the fix extends to
+/// the CLI render path. Assertions are minimal — we only check the
+/// compile succeeds and produces an HTML file. Shape of that output
+/// is upstream-experimental and not something we want to pin.
+#[test]
+fn render_html_fantastic_cv_happy_path() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.html");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg("fantastic-cv")
+        .arg("--format")
+        .arg("html")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    let size = std::fs::metadata(&out).expect("stat").len();
+    assert!(
+        size > 0,
+        "HTML output should be non-empty, was {size} bytes"
+    );
+}
+
+/// Adapter HTML happy-path: `modern-cv` (added in #58) compiles to
+/// HTML cleanly. Same minimal-assertion posture as the fantastic-cv
+/// case — we only assert compile success and non-empty output.
+#[test]
+fn render_html_modern_cv_happy_path() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.html");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg("modern-cv")
+        .arg("--format")
+        .arg("html")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    let size = std::fs::metadata(&out).expect("stat").len();
+    assert!(
+        size > 0,
+        "HTML output should be non-empty, was {size} bytes"
+    );
 }

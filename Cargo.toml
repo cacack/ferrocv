@@ -44,6 +44,8 @@ serde_json = "1"
 typst = "0.14.2"
 # PDF exporter, released in lockstep with `typst`.
 typst-pdf = "0.14.2"
+# HTML exporter, released in lockstep with typst.
+typst-html = "0.14.2"
 # Bundled font set (DejaVu, Linux Libertine, etc.) compiled into the
 # binary. The `fonts` feature is what carries the actual font bytes.
 # Bundling is what gives us cross-host reproducibility (CONSTITUTION

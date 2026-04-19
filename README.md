@@ -5,12 +5,14 @@ Render [JSON Resume](https://jsonresume.org/) to PDF, HTML, and text via
 
 ## Status
 
-**Early.** PDF and plain-text output work today (PDF via the
-`typst-jsonresume-cv` theme adapter, text via the native `text-minimal`
-theme). HTML output, additional themes, and native-theme tooling are
-tracked as [GitHub issues](https://github.com/cacack/ferrocv/issues)
-(HTML lives at #44) and organized into phase milestones. The
-non-negotiable design principles live in
+**Early.** PDF, plain-text, and HTML output all work today (PDF via
+any of the registered theme adapters, text and HTML via the native
+`text-minimal` theme by default). Additional themes and native-theme
+tooling are tracked as
+[GitHub issues](https://github.com/cacack/ferrocv/issues) and
+organized into phase milestones. HTML uses Typst's upstream-experimental
+HTML export — output shape may shift when Typst is bumped; the CLI
+surface itself is stable. The non-negotiable design principles live in
 [`CONSTITUTION.md`](./CONSTITUTION.md).
 
 ## Why
@@ -47,6 +49,11 @@ ferrocv render resume.json --theme typst-jsonresume-cv --output resume.pdf
 # Render to plain text (defaults to the native `text-minimal` theme;
 # `--theme` is optional for text)
 ferrocv render resume.json --format text
+
+# Render to HTML (also defaults to `text-minimal`). Note: Typst's HTML
+# export is upstream-experimental; output shape may shift across
+# ferrocv releases when Typst is bumped.
+ferrocv render resume.json --format html
 ```
 
 The quickest way to try it end-to-end is
@@ -55,12 +62,12 @@ forkable starter template that renders its own `resume.json` to PDF
 on every push via GitHub Actions and publishes the result to GitHub
 Pages.
 
-`render` defaults to `--format pdf`; HTML output is tracked at #44.
-`--theme` is required for `--format pdf` and optional for
-`--format text` (defaults to `text-minimal`). When `--output` is
-omitted, the output lands at `dist/resume.pdf` for PDF and
-`dist/resume.txt` for text; parent directories are created as needed.
-Both subcommands read from stdin if no path is given.
+`render` defaults to `--format pdf`. `--theme` is required for
+`--format pdf` and optional for `--format text` and `--format html`
+(both default to `text-minimal`). When `--output` is omitted, the
+output lands at `dist/resume.pdf` for PDF, `dist/resume.txt` for text,
+and `dist/resume.html` for HTML; parent directories are created as
+needed. Both subcommands read from stdin if no path is given.
 
 Exit codes (same for both subcommands):
 

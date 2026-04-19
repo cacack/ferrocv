@@ -1,7 +1,7 @@
-//! In-process Typst compilation to PDF and plain text.
+//! In-process Typst compilation to PDF, plain text, and HTML.
 //!
 //! Wraps the embedded `typst` crate behind a small library surface.
-//! Three public entry points:
+//! Four public entry points:
 //!
 //! - [`compile_pdf`] — compile a single Typst source string against a
 //!   JSON Resume value. Intended for smoke tests, one-off rendering,
@@ -13,34 +13,65 @@
 //! - [`compile_text`] — compile a [`crate::theme::Theme`] against a
 //!   JSON Resume value and extract a UTF-8 plain-text rendering by
 //!   walking the compiled frame tree. This is the foundation for
-//!   `ferrocv render --format text` (issue #45). Typst 0.13 has no
+//!   `ferrocv render --format text` (issue #45). Typst has no
 //!   dedicated text exporter, so we read glyph runs directly off
 //!   the [`PagedDocument`] rather than round-tripping through PDF
 //!   or HTML.
+//! - [`compile_html`] — compile a [`crate::theme::Theme`] against a
+//!   JSON Resume value and serialize to a single-file HTML document
+//!   via the `typst-html` exporter. This is the path the CLI
+//!   `render --format html` subcommand takes (issue #44).
 //!
-//! All three run the real Typst compiler in-process (no subprocess,
-//! no shell-out) and return either PDF bytes or extracted text.
+//! All four run the real Typst compiler in-process (no subprocess,
+//! no shell-out) and return either PDF bytes, extracted text, or an
+//! HTML string.
 //!
 //! # Constitutional commitments
 //!
 //! - **§2 — Embed Typst, never subprocess it.** The whole compilation
 //!   path is `typst::compile(&world)` followed by either
-//!   `typst_pdf::pdf(...)` (PDF) or a frame-walk extractor (text),
-//!   all linked statically. No `std::process::Command`, no shelling
-//!   out to the `typst` CLI, ever.
+//!   `typst_pdf::pdf(...)` (PDF), a frame-walk extractor (text), or
+//!   `typst_html::html(...)` (HTML), all linked statically. No
+//!   `std::process::Command`, no shelling out to the `typst` CLI,
+//!   ever.
 //! - **§6.1 — No network calls at render time.** The [`FerrocvWorld`]
 //!   does not implement a package resolver. Any `FileId` carrying a
 //!   `PackageSpec` (i.e. `@preview/...` imports) returns
 //!   [`FileError::Package(PackageError::NotFound(_))`]. There is no
 //!   code path by which Typst can reach the network from inside
-//!   `compile_pdf`, `compile_theme`, or `compile_text`. A test in
-//!   `tests/render.rs` enforces this.
+//!   `compile_pdf`, `compile_theme`, `compile_text`, or
+//!   `compile_html`. HTML compilation reuses the same World and the
+//!   same `source`/`file` implementations, so the guarantee applies
+//!   uniformly. Tests in `tests/render.rs` enforce this for both PDF
+//!   and HTML paths.
 //! - **§6.4 — Themes run under Typst's native sandbox, nothing more.**
 //!   We do not add filesystem-wide access, shell-escape, or any
 //!   custom capabilities. The World exposes exactly the virtual
 //!   files the caller registers plus the always-present
 //!   `/resume.json` slot wired to the caller-supplied JSON Resume
-//!   bytes.
+//!   bytes. HTML compilation gains no new capabilities; it only
+//!   selects a different compile target inside the same sandbox.
+//!
+//! # Experimental upstream status
+//!
+//! Typst's HTML export is labelled "experimental" by upstream. The
+//! reference docs banner reads verbatim:
+//!
+//! > "Typst's HTML export is currently under active development. The
+//! > feature is still very incomplete and only available for
+//! > experimentation behind a feature flag. Do not use this feature
+//! > for production use cases."
+//!
+//! We ship it anyway because the *CLI surface* we expose
+//! (`--format html`) is stable and internal to `ferrocv`; the churn
+//! is in Typst's HTML emitter's *output shape*, which our tests
+//! absorb by using loose substring + well-formedness assertions
+//! rather than byte-exact golden files. See
+//! `research/44-html-viability.md` for the full analysis.
+//!
+//! The Typst library flag `Feature::Html` is a library-builder
+//! option, not a Cargo feature of `ferrocv`. End users never see or
+//! enable it. See [`shared_library`].
 //!
 //! # Fonts
 //!
@@ -74,7 +105,8 @@ use typst::layout::{Frame, FrameItem, PagedDocument};
 use typst::syntax::{FileId, Source, VirtualPath};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
-use typst::{Library, LibraryExt, World};
+use typst::{Feature, Library, LibraryExt, World};
+use typst_html::HtmlDocument;
 use typst_pdf::PdfOptions;
 
 use crate::theme::Theme;
@@ -245,6 +277,41 @@ pub fn compile_text(theme: &Theme, data: &Value) -> Result<String, RenderError> 
     render_world_to_text(&world)
 }
 
+/// Compile a [`Theme`] bundle to a single-file HTML document against
+/// a JSON Resume value.
+///
+/// Mirrors [`compile_theme`] and [`compile_text`] but produces an HTML
+/// string via the `typst-html` exporter, using the same
+/// [`FerrocvWorld`] and the same Typst compilation path. HTML
+/// compilation therefore inherits the same constitutional guarantees —
+/// no subprocess (§2), no network (§6.1), no extended sandbox
+/// capabilities (§6.4).
+///
+/// The returned string is a complete HTML document, starting with
+/// `<!DOCTYPE html>`. Typst emits a single self-contained file — no
+/// external CSS, fonts, or images — so there is no post-processing
+/// step. See `research/44-html-viability.md` §5 for the evidence.
+///
+/// # Experimental upstream status
+///
+/// Typst labels its HTML export "experimental" and explicitly warns
+/// against production use. `ferrocv`'s `--format html` CLI surface is
+/// stable; the *output shape* emitted by this function may shift
+/// across Typst minor bumps. See the module-level
+/// "Experimental upstream status" section.
+///
+/// # Errors
+///
+/// Returns the same [`RenderError`] type as the PDF path; Typst
+/// compilation diagnostics flow through the shared
+/// `diagnostics_to_error` helper unchanged. HTML-specific rejections
+/// (e.g. `link("")` being fatal in HTML mode where PDF tolerated it
+/// for some theme sources) surface as plain compile errors here.
+pub fn compile_html(theme: &Theme, data: &Value) -> Result<String, RenderError> {
+    let world = FerrocvWorld::from_theme(theme, data);
+    render_world_to_html(&world)
+}
+
 /// Shared compile + PDF-serialize path used by both entry points.
 fn render_world(world: &FerrocvWorld) -> Result<Vec<u8>, RenderError> {
     // `typst::compile` returns Warned { output, warnings }. Drop
@@ -274,6 +341,23 @@ fn render_world_to_text(world: &FerrocvWorld) -> Result<String, RenderError> {
     } = typst::compile::<PagedDocument>(world);
     let document = output.map_err(diagnostics_to_error)?;
     Ok(extract_text(&document))
+}
+
+/// Shared compile + HTML-serialize path used by [`compile_html`].
+///
+/// Mirrors [`render_world`]'s shape: drive the same Typst compiler
+/// (but targeting [`HtmlDocument`] instead of [`PagedDocument`]),
+/// surface diagnostics through the same path, then serialize via
+/// `typst_html::html`. The [`Feature::Html`] library flag must be
+/// enabled for `typst::compile::<HtmlDocument>` to succeed; see
+/// [`shared_library`].
+fn render_world_to_html(world: &FerrocvWorld) -> Result<String, RenderError> {
+    let Warned {
+        output,
+        warnings: _,
+    } = typst::compile::<HtmlDocument>(world);
+    let document = output.map_err(diagnostics_to_error)?;
+    typst_html::html(&document).map_err(diagnostics_to_error)
 }
 
 /// Maximum vertical distance (in PostScript points) between two text
@@ -600,9 +684,27 @@ impl FerrocvWorld {
 }
 
 /// Cached library; built once per process.
+///
+/// `Feature::Html` is always enabled on the shared library. It is a
+/// Typst-internal library-builder option — **not** a user-facing
+/// Cargo feature of `ferrocv`, so CONSTITUTION §3 (HTML must not be
+/// permanently gated behind a feature flag) is upheld. End users
+/// never see or enable this flag; HTML output is selected purely via
+/// `--format html`.
+///
+/// The flag gates Typst's `html.*` namespace in the global scope and
+/// is required for `typst::compile::<HtmlDocument>` to succeed. PDF
+/// and text compilation ignore it entirely, so there is zero
+/// overhead for non-HTML callers. We enable it unconditionally rather
+/// than gating dynamically because the shared-cache lifecycle would
+/// otherwise have to juggle two `Library` instances — premature
+/// complexity for a feature the flag costs nothing to carry.
 fn shared_library() -> &'static LazyHash<Library> {
     static LIBRARY: OnceLock<LazyHash<Library>> = OnceLock::new();
-    LIBRARY.get_or_init(|| LazyHash::new(Library::default()))
+    LIBRARY.get_or_init(|| {
+        let features: typst::Features = [Feature::Html].into_iter().collect();
+        LazyHash::new(Library::builder().with_features(features).build())
+    })
 }
 
 /// Cached `(FontBook, fonts)` pair; built once per process.

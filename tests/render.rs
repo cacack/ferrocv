@@ -16,7 +16,7 @@
 //! 4. Package fetch is rejected — proves no network resolver is wired
 //!    up. This test is the in-code enforcement of CONSTITUTION §6.1.
 
-use ferrocv::{RenderError, compile_pdf};
+use ferrocv::{RenderError, Theme, compile_html, compile_pdf};
 use serde_json::{Value, json};
 
 /// PDF magic bytes; every valid PDF stream must start with `%PDF-`.
@@ -103,6 +103,32 @@ fn preview_package_import_is_rejected_no_network() {
     let source = r#"#import "@preview/cetz:0.2.0": *"#;
     let err = compile_pdf(source, &Value::Object(Default::default()))
         .expect_err("preview-package import must be rejected (no network resolver)");
+    let rendered = format!("{err}").to_lowercase();
+    assert!(
+        rendered.contains("preview")
+            || rendered.contains("cetz")
+            || rendered.contains("package")
+            || rendered.contains("not found"),
+        "diagnostic must mention the rejected package or 'not found'; got:\n{rendered}",
+    );
+}
+
+#[test]
+fn preview_package_import_is_rejected_in_html_compilation() {
+    // HTML counterpart to `preview_package_import_is_rejected_no_network`.
+    // CONSTITUTION §6.1 applies uniformly across all render targets —
+    // the HTML path must reject `@preview/...` imports for the same
+    // reason (no package resolver, no network fetch). Since
+    // `compile_html` takes a Theme (not a raw source), we wrap a
+    // minimal source as a one-file theme inline.
+    const ENTRY: &str = "/main.typ";
+    let theme = Theme {
+        name: "no-network-html-probe",
+        files: &[(ENTRY, br#"#import "@preview/cetz:0.2.0": *"# as &[u8])],
+        entrypoint: ENTRY,
+    };
+    let err = compile_html(&theme, &Value::Object(Default::default()))
+        .expect_err("preview-package import must be rejected in HTML compilation too");
     let rendered = format!("{err}").to_lowercase();
     assert!(
         rendered.contains("preview")
