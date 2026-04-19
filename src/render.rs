@@ -74,7 +74,7 @@ use typst::layout::{Frame, FrameItem, PagedDocument};
 use typst::syntax::{FileId, Source, VirtualPath};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
-use typst::{Library, World};
+use typst::{Library, LibraryExt, World};
 use typst_pdf::PdfOptions;
 
 use crate::theme::Theme;
