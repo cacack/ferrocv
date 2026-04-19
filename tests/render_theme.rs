@@ -114,13 +114,18 @@ fn typst_jsonresume_cv_renders_ada_lovelace_to_expected_text() {
         return;
     }
 
-    let expected = fs::read_to_string(&golden_path).unwrap_or_else(|e| {
+    let expected_raw = fs::read_to_string(&golden_path).unwrap_or_else(|e| {
         panic!(
             "read golden {}: {e}\nTo create it, run: \
              UPDATE_GOLDEN=1 cargo test --test render_theme",
             golden_path.display(),
         )
     });
+    // Normalize the on-disk golden too so CRLF-delimited checkouts
+    // (Windows + git autocrlf) match the always-LF output of
+    // `normalize()`. `.gitattributes` pins the file to LF for new
+    // checkouts, but pre-existing clones may still have CRLF.
+    let expected = normalize(&expected_raw);
 
     assert_eq!(
         normalized, expected,
