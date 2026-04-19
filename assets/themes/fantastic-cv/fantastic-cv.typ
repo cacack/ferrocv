@@ -112,15 +112,15 @@
       #{
         let items = (
           phone,
-          link(email)[#email],
-          link(url)[#url],
+          if email.len() == 0 { none } else { link(email)[#email] },
+          if url.len() == 0 { none } else { link(url)[#url] },
         )
         items.filter(x => x != none).join("  |  ")
         "  |  "
         profiles
           .map(profile => {
             profile.network + ": "
-            link(profile.url)[#profile.username]
+            if profile.url.len() == 0 { profile.username } else { link(profile.url)[#profile.username] }
           })
           .join("  |  ")
       }
@@ -135,10 +135,7 @@
   let section_body = {
     educations
       .map(education => {
-        let main = link(education.url)[#education.institution]
-        if education.url.len() == 0 {
-          main = education.institution
-        }
+        let main = if education.url.len() == 0 { education.institution } else { link(education.url)[#education.institution] }
         _entry_heading(
           main: main,
           dates: _format_dates(start-date: education.startDate, end-date: education.endDate),
@@ -165,10 +162,7 @@
   let section_body = {
     works
       .map(work => {
-        let main = link(work.url)[#work.name]
-        if work.url.len() == 0 {
-          main = work.name
-        }
+        let main = if work.url.len() == 0 { work.name } else { link(work.url)[#work.name] }
         [
           #_entry_heading(
             main: main,
@@ -194,14 +188,8 @@
   let section_body = {
     projects
       .map(project => {
-        let main = link(project.url)[#project.name]
-        if project.url.len() == 0 {
-          main = project.name
-        }
-        let source_code = link(project.source_code)[Source code]
-        if project.source_code.len() == 0 {
-          source_code = ""
-        }
+        let main = if project.url.len() == 0 { project.name } else { link(project.url)[#project.name] }
+        let source_code = if project.source_code.len() == 0 { "" } else { link(project.source_code)[Source code] }
         [
           #_entry_heading(
             main: main,
@@ -226,10 +214,7 @@
   let section_body = {
     volunteers
       .map(volunteer => {
-        let main = link(volunteer.url)[#volunteer.organization]
-        if volunteer.url.len() == 0 {
-          main = volunteer.organization
-        }
+        let main = if volunteer.url.len() == 0 { volunteer.organization } else { link(volunteer.url)[#volunteer.organization] }
         [
           #_entry_heading(
             main: main,
@@ -259,10 +244,7 @@
           if award.awarder.len() == 0 {
             awarder_str = ""
           }
-          let prefix = link(award.url)[#award.title]
-          if award.url.len() == 0 {
-            prefix = award.title
-          }
+          let prefix = if award.url.len() == 0 { award.title } else { link(award.url)[#award.title] }
           let summary_str = [#award.summary]
           if award.summary.len() == 0 {
             summary_str = ""
@@ -286,10 +268,7 @@
       if certificate.issuer.len() == 0 {
         issue_str = ""
       }
-      let prefix = link(certificate.url)[#certificate.name]
-      if certificate.url.len() == 0 {
-        prefix = certificate.name
-      }
+      let prefix = if certificate.url.len() == 0 { certificate.name } else { link(certificate.url)[#certificate.name] }
       [- #prefix#issue_str #post_fix]
     })
     .join(v(render_space_between_highlight))
@@ -306,10 +285,7 @@
     #(
       publications
         .map(publication => {
-          let prefix = link(publication.url)[#publication.name]
-          if publication.url.len() == 0 {
-            prefix = publication.name
-          }
+          let prefix = if publication.url.len() == 0 { publication.name } else { link(publication.url)[#publication.name] }
           let publisher_str = " - published by " + publication.publisher
           if publication.publisher.len() == 0 {
             publisher_str = ""

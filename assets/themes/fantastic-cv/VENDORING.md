@@ -54,11 +54,44 @@ Upstream LICENSE for reference:
 
 ## Patches applied
 
-No patches applied to the vendored source (`fantastic-cv.typ`). All
-JSON-Resume → fantastic-cv field mapping and the optional-field shim
-live in the adjacent `resume.typ` glue entrypoint. The glue is authored
-code, not a patch record — the vendored file stays byte-for-byte
-upstream so re-vendoring is a mechanical copy.
+**One compatibility patch**: every `link(x.url)` call in
+`fantastic-cv.typ` was restructured to guard the empty-URL case *before*
+`link()` is called, rather than upstream's "call `link()` then maybe
+rebind" pattern.
+
+Why: Typst `link("")` is a fatal error in 0.14.x (`error: URL must not
+be empty`). Upstream's original pattern —
+
+```typst
+let main = link(education.url)[#education.institution]
+if education.url.len() == 0 {
+  main = education.institution
+}
+```
+
+— evaluates `link("")` eagerly before the post-hoc guard ever runs, so
+any schema-valid JSON Resume that omits a `url` on an entry dies at
+compile. JSON Resume v1.0.0 makes every `url` field optional, so
+real-world resumes trigger this constantly.
+
+The patch pattern applied at every call site (11 sites in total) is
+semantically identical but guards the `link()` call itself:
+
+```typst
+let main = if education.url.len() == 0 { education.institution } else { link(education.url)[#education.institution] }
+```
+
+Affected line ranges (after patching): 115, 116, 123, 138, 165, 191,
+192, 217, 247, 271, 288 — i.e. every `link(...)` call that takes a
+URL field out of the JSON Resume data.
+
+The patch is minimal, preserves upstream's intent exactly, and is
+forward-compatible with any future upstream fix (if upstream adopts
+the same restructure, re-vendoring becomes a byte-for-byte copy again).
+
+All other JSON-Resume → fantastic-cv field mapping and the
+optional-field shim live in the adjacent `resume.typ` glue entrypoint,
+as before.
 
 The upstream source does **not** import any `@preview/...` packages at
 the pinned SHA, so there is no network-fetch patch to apply (contrast
@@ -111,13 +144,18 @@ To re-vendor from a newer upstream:
    (e.g., `curl -O
    https://raw.githubusercontent.com/austinyu/fantastic-cv/<SHA>/src/fantastic-cv.typ`).
 2. Copy it over the file in this directory, overwriting byte-for-byte.
-3. Update the Commit SHA, Commit date, Package version, and Vendor
+3. **Re-apply the empty-URL-guard patch** documented under "Patches
+   applied" above. `grep -n "link(" fantastic-cv.typ` enumerates the
+   call sites; each must be guarded as shown. If upstream has adopted
+   the same restructure, the grep result will already match the
+   patched shape and this step is a no-op.
+4. Update the Commit SHA, Commit date, Package version, and Vendor
    date rows in the Provenance table above.
-4. Adjust `resume.typ` if any of fantastic-cv's `render-*` signatures
+5. Adjust `resume.typ` if any of fantastic-cv's `render-*` signatures
    changed. `grep -n "^#let \(config\|render-\)" fantastic-cv.typ`
    enumerates the current signatures; `grep -n "render-" resume.typ`
    enumerates every call site.
-5. Re-verify no new `@preview/...` imports crept in:
+6. Re-verify no new `@preview/...` imports crept in:
    `grep -n "@preview/" fantastic-cv.typ` must return no matches.
-6. Regenerate goldens: `UPDATE_GOLDEN=1 cargo test --test render_theme`
+7. Regenerate goldens: `UPDATE_GOLDEN=1 cargo test --test render_theme`
    and inspect the diffs before committing.
