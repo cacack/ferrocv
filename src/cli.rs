@@ -20,7 +20,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 
-use crate::{THEMES, compile_theme, find_theme, validate_value};
+use crate::{THEMES, ValidationError, compile_theme, find_theme, validate_value};
 
 /// Render JSON Resume documents via embedded Typst.
 #[derive(Debug, Parser)]
@@ -106,15 +106,28 @@ fn run_validate(path: Option<&Path>) -> Result<ExitCode> {
         }
     };
 
-    // Step 3: validate. On failure, one diagnostic per error to stderr.
+    // Step 3: validate. On failure, a summary header plus one indented
+    // diagnostic per error to stderr.
     match validate_value(&value) {
         Ok(()) => Ok(ExitCode::SUCCESS),
         Err(errors) => {
-            for err in errors {
-                eprintln!("{err}");
-            }
+            report_validation_errors(&errors, "");
             Ok(ExitCode::from(1))
         }
+    }
+}
+
+/// Print schema validation errors to stderr with a summary header.
+///
+/// `suffix` is appended to the header line (after the error count) so
+/// `render` can add "; no output written" without `validate` having to
+/// lie about emitting an output.
+fn report_validation_errors(errors: &[ValidationError], suffix: &str) {
+    let n = errors.len();
+    let plural = if n == 1 { "" } else { "s" };
+    eprintln!("error: schema validation failed ({n} error{plural}){suffix}");
+    for err in errors {
+        eprintln!("  {err}");
     }
 }
 
@@ -138,11 +151,11 @@ fn run_render(
     };
 
     // Step 3: validate. Render is defined to run validate first so
-    // users get a clean schema diagnostic before any Typst noise.
+    // users get a clean schema diagnostic before any Typst noise. The
+    // header calls out the render-specific consequence (no output
+    // written) so a terse validator message doesn't read as a warning.
     if let Err(errors) = validate_value(&value) {
-        for err in errors {
-            eprintln!("{err}");
-        }
+        report_validation_errors(&errors, "; no output written");
         return Ok(ExitCode::from(1));
     }
 
