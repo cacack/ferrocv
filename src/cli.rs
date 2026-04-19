@@ -8,10 +8,11 @@
 //! Exit codes (contractual, shared across subcommands):
 //! - `0` — operation succeeded
 //!   - `validate`: document is valid
-//!   - `render`: PDF written to `--output`
+//!   - `render`: PDF or text written to `--output`
 //! - `1` — document parsed as JSON but failed schema validation
-//! - `2` — usage error, IO error, malformed JSON, unknown theme,
-//!   unknown format, or Typst render error
+//! - `2` — usage error (e.g. `--theme` missing for `--format pdf`),
+//!   IO error, malformed JSON, unknown theme, unknown format, or
+//!   Typst render error
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -20,7 +21,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use serde_json::Value;
 
-use crate::{THEMES, ValidationError, compile_theme, find_theme, validate_value};
+use crate::{THEMES, ValidationError, compile_text, compile_theme, find_theme, validate_value};
 
 /// Render JSON Resume documents via embedded Typst.
 #[derive(Debug, Parser)]
@@ -41,23 +42,32 @@ enum Commands {
         /// Path to a JSON Resume document. Reads stdin if omitted.
         path: Option<PathBuf>,
     },
-    /// Render a JSON Resume document to PDF via the named theme.
+    /// Render a JSON Resume document to PDF or plain text via the
+    /// named theme.
+    ///
+    /// `--theme` is required for `--format pdf` (no sensible default
+    /// adapter to pick). For `--format text` it defaults to the native
+    /// `text-minimal` theme so plain-text output works out of the box.
     ///
     /// Exit codes:
-    /// - 0 — rendered successfully; PDF written to --output
+    /// - 0 — rendered successfully; output written to --output
     /// - 1 — JSON parsed but failed schema validation
-    /// - 2 — IO error, parse error, unknown theme, or render error
+    /// - 2 — usage error (missing required `--theme` for pdf), IO
+    ///   error, parse error, unknown theme, or render error
     Render {
         /// Path to a JSON Resume document. Reads stdin if omitted.
         path: Option<PathBuf>,
         /// Theme name. See the registered themes in `ferrocv::THEMES`.
+        /// Optional for `--format text` (defaults to `text-minimal`);
+        /// required for `--format pdf`.
         #[arg(long)]
-        theme: String,
-        /// Output format. Only `pdf` is supported in Phase 1.
+        theme: Option<String>,
+        /// Output format. Defaults to `pdf`.
         #[arg(long, default_value = "pdf")]
         format: Format,
         /// Output file path. Parent directories are created as needed.
-        /// Defaults to `dist/resume.pdf`.
+        /// Defaults to `dist/resume.pdf` for `--format pdf` and
+        /// `dist/resume.txt` for `--format text`.
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
     },
@@ -65,13 +75,39 @@ enum Commands {
 
 /// Output formats supported by `ferrocv render`.
 ///
-/// Phase 1 ships PDF only. HTML and plain text land in Phase 2 (#14)
-/// — adding them is a matter of new variants plus a matching arm in
-/// [`run_render`]'s format dispatch, not a refactor.
+/// Phase 2 ships PDF and plain text. HTML is tracked separately
+/// (issue #44).
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
 enum Format {
     Pdf,
-    // TODO Phase 2 (#14): Html, Text
+    Text,
+    // TODO Phase 2 (#44): Html
+}
+
+/// Resolve which theme name to use given the format and the optional
+/// `--theme` argument.
+///
+/// Returns `Err` when the user must explicitly pick a theme but did not
+/// (currently only `--format pdf`). Returning `&'static str` for the
+/// error keeps allocation off the hot path; the caller prints it
+/// verbatim.
+fn resolve_theme_name(format: Format, requested: Option<&str>) -> Result<&str, &'static str> {
+    match (format, requested) {
+        (_, Some(name)) => Ok(name),
+        (Format::Text, None) => Ok("text-minimal"),
+        (Format::Pdf, None) => Err("error: --theme is required for --format pdf"),
+    }
+}
+
+/// Default output path for a given format.
+///
+/// Centralized so the CLI's defaulting logic and any future docs/tests
+/// agree on a single source of truth.
+fn default_output_path(format: Format) -> PathBuf {
+    match format {
+        Format::Pdf => PathBuf::from("dist/resume.pdf"),
+        Format::Text => PathBuf::from("dist/resume.txt"),
+    }
 }
 
 /// Entry point invoked from `main`.
@@ -87,7 +123,7 @@ pub fn run() -> Result<ExitCode> {
             theme,
             format,
             output,
-        } => run_render(path.as_deref(), &theme, format, output.as_deref()),
+        } => run_render(path.as_deref(), theme.as_deref(), format, output.as_deref()),
     }
 }
 
@@ -133,15 +169,25 @@ fn report_validation_errors(errors: &[ValidationError], suffix: &str) {
 
 fn run_render(
     path: Option<&Path>,
-    theme_name: &str,
+    theme_name: Option<&str>,
     format: Format,
     output: Option<&Path>,
 ) -> Result<ExitCode> {
-    // Step 1: read input. IO failures bubble up via anyhow and main
+    // Step 1: resolve theme name first. A missing `--theme` for pdf is
+    // a usage error and we want to fail before doing IO work.
+    let theme_name = match resolve_theme_name(format, theme_name) {
+        Ok(name) => name,
+        Err(msg) => {
+            eprintln!("{msg}");
+            return Ok(ExitCode::from(2));
+        }
+    };
+
+    // Step 2: read input. IO failures bubble up via anyhow and main
     // maps them to exit code 2 (same as validate).
     let input = read_input(path)?;
 
-    // Step 2: parse JSON.
+    // Step 3: parse JSON.
     let value: Value = match serde_json::from_str(&input) {
         Ok(v) => v,
         Err(err) => {
@@ -150,7 +196,7 @@ fn run_render(
         }
     };
 
-    // Step 3: validate. Render is defined to run validate first so
+    // Step 4: validate. Render is defined to run validate first so
     // users get a clean schema diagnostic before any Typst noise. The
     // header calls out the render-specific consequence (no output
     // written) so a terse validator message doesn't read as a warning.
@@ -159,7 +205,7 @@ fn run_render(
         return Ok(ExitCode::from(1));
     }
 
-    // Step 4: resolve theme. Unknown names list the alternatives so
+    // Step 5: resolve theme. Unknown names list the alternatives so
     // users know what they could have typed.
     let theme = match find_theme(theme_name) {
         Some(t) => t,
@@ -171,8 +217,10 @@ fn run_render(
         }
     };
 
-    // Step 5: format dispatch. Phase 1 ships PDF only.
-    let bytes = match format {
+    // Step 6: format dispatch. PDF returns bytes; text returns a
+    // String which we convert to UTF-8 bytes for the shared write
+    // path below.
+    let bytes: Vec<u8> = match format {
         Format::Pdf => match compile_theme(theme, &value) {
             Ok(bytes) => bytes,
             Err(err) => {
@@ -180,15 +228,21 @@ fn run_render(
                 return Ok(ExitCode::from(2));
             }
         },
-        // TODO Phase 2 (#14): Html, Text
+        Format::Text => match compile_text(theme, &value) {
+            Ok(text) => text.into_bytes(),
+            Err(err) => {
+                eprintln!("{err}");
+                return Ok(ExitCode::from(2));
+            }
+        },
     };
 
-    // Step 6: write output. Default path is `dist/resume.pdf`; parent
+    // Step 7: write output. Default path depends on format; parent
     // directories are created as needed. Overwrites without prompting
     // — this is a build tool.
     let out_path: PathBuf = output
         .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("dist/resume.pdf"));
+        .unwrap_or_else(|| default_output_path(format));
     if let Some(parent) = out_path.parent()
         && !parent.as_os_str().is_empty()
         && let Err(err) = std::fs::create_dir_all(parent)

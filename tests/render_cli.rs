@@ -204,19 +204,174 @@ fn render_rejects_unknown_format_with_exit_two() {
     let out = tmp.path().join("out.pdf");
 
     // clap's ValueEnum mismatch exits 2 before we reach any of our code.
+    // `xml` stands in for "any format we don't ship"; `html` was the
+    // previous canary but is reserved for #44 and may land soon.
     ferrocv()
         .arg("render")
         .arg(fixture("render_full"))
         .arg("--theme")
         .arg("typst-jsonresume-cv")
         .arg("--format")
-        .arg("html")
+        .arg("xml")
         .arg("--output")
         .arg(&out)
         .assert()
         .code(2);
 
     assert!(!out.exists());
+}
+
+// --- Text format scenarios ---------------------------------------------
+//
+// Mirror the PDF scenarios above for `--format text`. The `text-minimal`
+// native theme is exercised end-to-end through the CLI (file existence,
+// recognizable content, exit-code contract). Byte-level structure of the
+// extracted text is asserted by the golden test in `tests/render_text.rs`,
+// not here.
+
+#[test]
+fn render_writes_text_to_output_path() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg("text-minimal")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    let body = std::fs::read_to_string(&out).expect("text output must be UTF-8");
+    assert!(!body.is_empty(), "text output must not be empty");
+    assert!(
+        body.contains("Ada Lovelace"),
+        "text output must contain the rendered name; got: {body:?}"
+    );
+}
+
+#[test]
+fn render_text_uses_text_minimal_when_theme_omitted() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    let body = std::fs::read_to_string(&out).expect("text output must be UTF-8");
+    assert!(
+        body.contains("Ada Lovelace"),
+        "text output must contain the rendered name; got: {body:?}"
+    );
+}
+
+#[test]
+fn render_text_default_output_path_is_dist_resume_txt() {
+    // No `--output`, no `--theme`. `current_dir` is set to a tempdir so
+    // the default `dist/resume.txt` lands under the temp tree rather
+    // than polluting the workspace.
+    let tmp = tempfile::tempdir().expect("tempdir");
+
+    ferrocv()
+        .current_dir(tmp.path())
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--format")
+        .arg("text")
+        .assert()
+        .success();
+
+    let expected = tmp.path().join("dist/resume.txt");
+    assert!(
+        expected.exists(),
+        "default text output must land at <cwd>/dist/resume.txt; expected {}",
+        expected.display()
+    );
+}
+
+#[test]
+fn render_text_rejects_invalid_resume_with_exit_one() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("invalid_wrong_type_email"))
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(1)
+        .stderr(predicate::str::contains("/basics/email"));
+
+    assert!(
+        !out.exists(),
+        "no output file should be written when validation fails",
+    );
+}
+
+#[test]
+fn render_pdf_requires_theme_flag() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    // No `--theme`; explicit `--format pdf` (also the default).
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--format")
+        .arg("pdf")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("--theme is required"));
+
+    assert!(
+        !out.exists(),
+        "no output file should be written when --theme is missing",
+    );
+}
+
+#[test]
+fn render_text_accepts_resume_on_stdin() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+    let input =
+        std::fs::read_to_string(fixture("render_full")).expect("fixture `render_full.json`");
+
+    ferrocv()
+        .arg("render")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .write_stdin(input)
+        .assert()
+        .success();
+
+    assert!(out.exists());
+    let body = std::fs::read_to_string(&out).expect("text output must be UTF-8");
+    assert!(
+        body.contains("Ada Lovelace"),
+        "text output must contain the rendered name; got: {body:?}"
+    );
 }
 
 #[test]
