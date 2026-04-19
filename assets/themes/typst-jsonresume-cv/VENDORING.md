@@ -35,9 +35,10 @@ preserved in-tree.
 
 ## Patches applied
 
-Two patches were applied to the upstream theme source to make it
-compile under `ferrocv::render::FerrocvWorld`. Both are recorded below
-with before/after snippets.
+Three patches were applied to the upstream theme source to make it
+compile under `ferrocv::render::FerrocvWorld` against arbitrary
+schema-valid JSON Resume documents. All three are recorded below with
+before/after snippets.
 
 ### 1. `base.typ`: remove `@preview/scienceicons` import
 
@@ -102,6 +103,92 @@ source (see the smoke tests in `tests/render.rs`).
 
 **Behavioral impact:** none — the theme reads the same JSON Resume
 fields from the same parsed structure. Only the lookup path changes.
+
+### 3. `resume.typ`: optional-field shim
+
+**Why:** JSON Resume v1.0.0 has zero required fields — the schema
+allows `{}` as a valid document — but the upstream template reads
+several fields directly (`r.meta.language`, `r.basics.location.city`,
+`r.basics.location.region`, `r.basics.email`, `r.basics.phone`) and
+dereferences the top-level `work`/`projects`/`education` arrays
+without an `in`-check. Any schema-valid document omitting one of
+those fields produces a Typst dictionary-lookup error at render time,
+directly conflicting with `CONSTITUTION.md` §1 ("JSON Resume is the
+canonical input, unmodified"). This patch wraps every such read in
+`.at(..., default: ...)` and guards the top-level section checks
+with `"<key>" in r` so that any schema-valid resume renders.
+
+**Before** (upstream shape):
+
+```typst
+#let getProfile(resume, network) = {
+  let profile = none
+  if "profiles" in resume.basics and resume.basics.profiles != none {
+    ...
+
+#let lang = r.meta.language
+#let name = r.basics.name
+#let address = r.basics.location.city + ", " + r.basics.location.region
+#let emailAddress = r.basics.email
+#let phoneNumber = r.basics.phone
+
+#if show_work and r.work != none and r.work.len() > 0 { ... }
+#if show_projects and r.projects != none and r.projects.len() > 0 { ... }
+#if show_education and r.education != none and r.education.len() > 0 { ... }
+```
+
+**After:**
+
+```typst
+#let getProfile(resume, network) = {
+  let profile = none
+  let basics = resume.at("basics", default: (:))
+  if "profiles" in basics and basics.profiles != none {
+    ...
+
+#let basics = r.at("basics", default: (:))
+#let meta = r.at("meta", default: (:))
+#let location = basics.at("location", default: (:))
+
+#let lang = meta.at("language", default: "en")
+#let name = basics.at("name", default: "")
+#let city = location.at("city", default: "")
+#let region = location.at("region", default: "")
+#let address = if city != "" and region != "" {
+  city + ", " + region
+} else if city != "" {
+  city
+} else {
+  region
+}
+#let emailAddress = basics.at("email", default: "")
+#let phoneNumber = basics.at("phone", default: "")
+
+#if show_work and "work" in r and r.work != none and r.work.len() > 0 { ... }
+#if show_projects and "projects" in r and r.projects != none and r.projects.len() > 0 { ... }
+#if show_education and "education" in r and r.education != none and r.education.len() > 0 { ... }
+```
+
+**Behavioral impact:** a full-field resume renders identically — the
+`render_theme` golden test confirms byte-for-byte stability of the
+extracted text against the committed `render_full.json` fixture.
+Sparse resumes that previously crashed now render with sensible
+defaults: missing language falls back to `"en"` (so the English
+section titles apply), missing contact fields produce empty strings
+(which `contact-item` already filters out of the contact line), and
+missing location components collapse (`city, region` → just `city`
+or just `region` or empty).
+
+**What the shim does not address:** fields inside work/education/
+projects/skills entries (`job.name`, `job.position`,
+`education_item.institution`, `education_item.studyType`,
+`education_item.area`, `skill.name`, `skill.keywords`, etc.) are
+still read unconditionally inside `base.typ`'s section builders.
+JSON Resume v1.0.0 treats these as optional, but in practice every
+realistic entry carries them. If a future bug report surfaces a
+schema-valid document that's sparse *inside* an entry, extend the
+shim (or fix it at the ferrocv Rust layer by normalizing the JSON
+before handing it to Typst) at that point.
 
 ## What was NOT patched
 

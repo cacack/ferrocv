@@ -2,16 +2,18 @@
 
 #let getProfile(resume, network) = {
   let profile = none
-
-  if "profiles" in resume.basics and resume.basics.profiles != none {
-    for p in resume.basics.profiles {
+  // ferrocv vendor patch: `basics` itself is optional per JSON Resume v1.0.0.
+  // See VENDORING.md ("optional-field shim").
+  let basics = resume.at("basics", default: (:))
+  if "profiles" in basics and basics.profiles != none {
+    for p in basics.profiles {
       if "network" in p and p.network == network {
         profile = p
         break
       }
     }
   }
-  
+
   profile
 }
 
@@ -20,12 +22,30 @@
 // build script copies the user's resume.json there). In ferrocv, the FerrocvWorld
 // serves the JSON Resume bytes at the virtual path "/resume.json". See VENDORING.md.
 #let r = json("/resume.json")
-#let lang = r.meta.language
-#let name = r.basics.name
-#let address = r.basics.location.city + ", " + r.basics.location.region
-#let emailAddress = r.basics.email
-#let phoneNumber = r.basics.phone
-#let website = r.basics.at("url", default:none) //Set to none if you want to hide it
+
+// ferrocv vendor patch (optional-field shim): JSON Resume v1.0.0 has zero
+// required fields, but upstream assumed `meta.language`, `basics.location.city`,
+// `basics.location.region`, `basics.email`, and `basics.phone` would always
+// be present. Each read is wrapped in `.at(..., default: ...)` so any
+// schema-valid document renders. See VENDORING.md.
+#let basics = r.at("basics", default: (:))
+#let meta = r.at("meta", default: (:))
+#let location = basics.at("location", default: (:))
+
+#let lang = meta.at("language", default: "en")
+#let name = basics.at("name", default: "")
+#let city = location.at("city", default: "")
+#let region = location.at("region", default: "")
+#let address = if city != "" and region != "" {
+  city + ", " + region
+} else if city != "" {
+  city
+} else {
+  region
+}
+#let emailAddress = basics.at("email", default: "")
+#let phoneNumber = basics.at("phone", default: "")
+#let website = basics.at("url", default: none) //Set to none if you want to hide it
 #let githubProfile = none
 #let linkedinProfile = none
 #if getProfile(r, "GitHub") != none {
@@ -62,15 +82,18 @@
 )
 
 // Section work experience
-#if show_work and r.work != none and r.work.len() > 0 {
+// ferrocv vendor patch (optional-field shim): top-level `work`/`projects`/
+// `education` keys are all optional per JSON Resume v1.0.0, so guard with
+// `in r` before reading.
+#if show_work and "work" in r and r.work != none and r.work.len() > 0 {
   work(work: r.work, lang: lang)
 }
 // Section projects
-#if show_projects and r.projects != none and r.projects.len() > 0 {
+#if show_projects and "projects" in r and r.projects != none and r.projects.len() > 0 {
   projects(projects: r.projects, lang: lang)
 }
 // Section education
-#if show_education and r.education != none and r.education.len() > 0 {
+#if show_education and "education" in r and r.education != none and r.education.len() > 0 {
   edu(education: r.education, lang: lang)
 }
 // Section certificates, skills and interests
