@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/cacack/ferrocv/compare/v0.2.0...v0.2.1) (2026-04-19)
+
+
+### Bug Fixes
+
+* **cli:** add summary header to validation error output ([9fd5d6e](https://github.com/cacack/ferrocv/commit/9fd5d6eab659c9ff8b2eafe97171b1dc538538a4))
+* **theme:** accept schema-valid-but-sparse resumes in typst-jsonresume-cv ([978081f](https://github.com/cacack/ferrocv/commit/978081f498d0d574c04c5635d2da4d2a7d4ef80d))
+
 ## [0.2.0](https://github.com/cacack/ferrocv/compare/v0.1.0...v0.2.0) (2026-04-19)
 
 
