@@ -78,6 +78,12 @@ Exit codes (same for both subcommands):
 No network is touched — the schema, theme, and fonts are all compiled
 into the binary.
 
+## Contributing
+
+To add a new theme adapter, see
+[`docs/adapters.md`](./docs/adapters.md) for the contributor walkthrough
+(vendoring conventions, registry entry, golden tests, common pitfalls).
+
 ## Development
 
 Run the full CI check suite locally before pushing:
