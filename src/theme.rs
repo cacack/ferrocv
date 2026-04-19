@@ -31,8 +31,8 @@
 //!
 //! # Why a static slice, not a `HashMap` or `ThemeRegistry`
 //!
-//! Phase 2 ships with two themes total. A linear scan over `THEMES`
-//! is O(n) for n ≤ 2. CONSTITUTION §5 ("simple now, iterate later")
+//! Phase 2 ships with three themes total. A linear scan over `THEMES`
+//! is O(n) for n ≤ 3. CONSTITUTION §5 ("simple now, iterate later")
 //! calls for the narrower solution here; generalizing to a hashed
 //! lookup or a builder pattern should wait for a second caller that
 //! actually needs it.
@@ -209,7 +209,7 @@ pub const THEMES: &[&Theme] = &[&TYPST_JSONRESUME_CV, &FANTASTIC_CV, &TEXT_MINIM
 /// Look up a [`Theme`] by name. Returns `None` for unknown names.
 ///
 /// Linear scan over [`THEMES`]; O(n) for n themes. Acceptable for
-/// the current n ≤ 2 regime (CONSTITUTION §5).
+/// the current n ≤ 3 regime (CONSTITUTION §5).
 pub fn find_theme(name: &str) -> Option<&'static Theme> {
     THEMES.iter().copied().find(|t| t.name == name)
 }

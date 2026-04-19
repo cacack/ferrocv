@@ -24,16 +24,17 @@
 //! # Constitutional commitments
 //!
 //! - **§2 — Embed Typst, never subprocess it.** The whole compilation
-//!   path is `typst::compile(&world)` followed by `typst_pdf::pdf(...)`,
-//!   both linked statically. No `std::process::Command`, no shelling
+//!   path is `typst::compile(&world)` followed by either
+//!   `typst_pdf::pdf(...)` (PDF) or a frame-walk extractor (text),
+//!   all linked statically. No `std::process::Command`, no shelling
 //!   out to the `typst` CLI, ever.
 //! - **§6.1 — No network calls at render time.** The [`FerrocvWorld`]
 //!   does not implement a package resolver. Any `FileId` carrying a
 //!   `PackageSpec` (i.e. `@preview/...` imports) returns
 //!   [`FileError::Package(PackageError::NotFound(_))`]. There is no
 //!   code path by which Typst can reach the network from inside
-//!   `compile_pdf` or `compile_theme`. A test in `tests/render.rs`
-//!   enforces this.
+//!   `compile_pdf`, `compile_theme`, or `compile_text`. A test in
+//!   `tests/render.rs` enforces this.
 //! - **§6.4 — Themes run under Typst's native sandbox, nothing more.**
 //!   We do not add filesystem-wide access, shell-escape, or any
 //!   custom capabilities. The World exposes exactly the virtual
