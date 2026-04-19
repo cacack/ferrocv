@@ -2,8 +2,10 @@
 //! via embedded Typst. See `CONSTITUTION.md` for design principles.
 
 pub mod cli;
+pub mod render;
 pub mod validate;
 
+pub use render::{RenderDiagnostic, RenderError, compile_pdf};
 pub use validate::{ValidationError, validate_value};
 
 /// JSON Resume v1.0.0 schema, embedded at compile time.
