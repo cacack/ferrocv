@@ -36,6 +36,18 @@ jsonschema = { version = "0.46", default-features = false }
 # CLI-layer error propagation. Library code stays anyhow-free.
 anyhow = "1"
 serde_json = "1"
+# Embedded Typst compiler — produces PDF bytes entirely in-process.
+# CONSTITUTION.md §2 forbids subprocessing the `typst` CLI, so we link
+# the library directly. Pinned to 0.13.1 (next minor 0.14.x is available
+# now that MSRV is 1.89; defer the bump to its own PR).
+typst = "0.13.1"
+# PDF exporter, released in lockstep with `typst`.
+typst-pdf = "0.13.1"
+# Bundled font set (DejaVu, Linux Libertine, etc.) compiled into the
+# binary. The `fonts` feature is what carries the actual font bytes.
+# Bundling is what gives us cross-host reproducibility (CONSTITUTION
+# §6.4: same Typst sandbox everywhere) without scanning system fonts.
+typst-assets = { version = "0.13.1", features = ["fonts"] }
 
 [dev-dependencies]
 serde_json = "1"
