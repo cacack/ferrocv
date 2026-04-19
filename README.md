@@ -50,6 +50,25 @@ cat resume.json | ferrocv validate
 
 No network is touched — the schema is compiled into the binary.
 
+## Development
+
+Run the full CI check suite locally before pushing:
+
+```sh
+make preflight
+```
+
+This mirrors `.github/workflows/ci.yml` and runs `cargo fmt --check`,
+`cargo clippy -D warnings`, `cargo test`, `cargo-deny`, `cargo-audit`,
+and `typos`. Individual checks are available as their own targets
+(`make clippy`, `make test`, ...); run `make help` for the full list.
+
+First-time setup installs the non-cargo-stock tools:
+
+```sh
+make install-tools
+```
+
 ## Non-goals
 
 - Replacing the JSON Resume schema or project.
