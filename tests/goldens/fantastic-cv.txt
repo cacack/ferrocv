@@ -1,0 +1,28 @@
+Ada Lovelace London, England
+
++44-20-0000-0000  |   ada@example.com   |   https://example.com/ada   |  GitHub:  ada   |  LinkedIn:  ada-lovelace
+
+Work
+Analytical Engines Ltd 1843-01-01  —  1852-11-27
+
+Programmer  | Translated and annotated Menabrea's paper on the Analytical Engine; wrote the first published algorithm
+intended for machine execution.• Published the first algorithm designed for a machine (Bernoulli numbers)
+• Introduced the concept of a general-purpose computing device
+
+Education
+ University of London 1833-01-01  —  1843-01-01
+
+Self-directed  | Mathematics | GPA:
+• Selected coursework :
+
+Projects
+Notes on the Analytical Engine 1842-01-01  —  1843-07-01
+
+Expanded translation of Menabrea's sketch, including the first published algorithm for a computing machine.• Note G — the Bernoulli-number algorithm
+
+Certificates
+ • Honorary Fellowship in Computing History  - issued by Analytical Engines Ltd 1843-09-01
+
+Skills
+• Programming:  Analytical Engine, Algorithms
+• Mathematics:  Calculus, Symbolic logic

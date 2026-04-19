@@ -68,9 +68,11 @@ const PDF_MAGIC: &[u8] = b"%PDF-";
 /// instead of asserting equality.
 const UPDATE_ENV: &str = "UPDATE_GOLDEN";
 
+// typst-jsonresume-cv adapter goldens.
 #[test]
 fn typst_jsonresume_cv_renders_ada_lovelace_to_expected_text() {
     run_golden(
+        "typst-jsonresume-cv",
         "tests/fixtures/render_full.json",
         "tests/goldens/typst-jsonresume-cv.txt",
         "Ada Lovelace",
@@ -80,33 +82,55 @@ fn typst_jsonresume_cv_renders_ada_lovelace_to_expected_text() {
 #[test]
 fn typst_jsonresume_cv_renders_grace_hopper_sparse_to_expected_text() {
     run_golden(
+        "typst-jsonresume-cv",
         "tests/fixtures/render_sparse.json",
         "tests/goldens/typst-jsonresume-cv-sparse.txt",
         "Grace Hopper",
     );
 }
 
-/// Shared golden-file workflow: compile the adapter against the named
-/// fixture, extract and normalize the PDF text, and compare against
-/// (or rewrite, under `UPDATE_GOLDEN`) the committed golden.
+// fantastic-cv adapter goldens.
+#[test]
+fn fantastic_cv_renders_ada_lovelace_to_expected_text() {
+    run_golden(
+        "fantastic-cv",
+        "tests/fixtures/render_full.json",
+        "tests/goldens/fantastic-cv.txt",
+        "Ada Lovelace",
+    );
+}
+
+#[test]
+fn fantastic_cv_renders_grace_hopper_sparse_to_expected_text() {
+    run_golden(
+        "fantastic-cv",
+        "tests/fixtures/render_sparse.json",
+        "tests/goldens/fantastic-cv-sparse.txt",
+        "Grace Hopper",
+    );
+}
+
+/// Shared golden-file workflow: compile the named adapter against the
+/// named fixture, extract and normalize the PDF text, and compare
+/// against (or rewrite, under `UPDATE_GOLDEN`) the committed golden.
 ///
 /// `required_name` is a substring the extracted text must contain
 /// before we'll consider writing a golden from it — a cheap sanity
 /// check that `pdf-extract` hasn't degenerated and we're not about to
 /// freeze garbage.
-fn run_golden(fixture: &str, golden: &str, required_name: &str) {
+fn run_golden(theme_name: &str, fixture: &str, golden: &str, required_name: &str) {
     let fixture_path = crate_path(fixture);
     let fixture_bytes = fs::read(&fixture_path)
         .unwrap_or_else(|e| panic!("read fixture {}: {e}", fixture_path.display()));
     let data: Value = serde_json::from_slice(&fixture_bytes)
         .unwrap_or_else(|e| panic!("parse fixture {}: {e}", fixture_path.display()));
 
-    let theme =
-        ferrocv::find_theme("typst-jsonresume-cv").expect("theme must be registered in THEMES");
+    let theme = ferrocv::find_theme(theme_name)
+        .unwrap_or_else(|| panic!("theme `{theme_name}` must be registered in THEMES"));
 
     let bytes = ferrocv::compile_theme(theme, &data).unwrap_or_else(|e| {
         panic!(
-            "typst-jsonresume-cv must compile against {}: {e}",
+            "{theme_name} must compile against {}: {e}",
             fixture_path.display()
         )
     });
