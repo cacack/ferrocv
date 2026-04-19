@@ -10,10 +10,6 @@ out, delete it.
 
 ## Open questions
 
-- [ ] Confirm Typst HTML export maturity at the time of implementation
-      (blocker on the Phase 2 HTML output issue).
-- [ ] DOCX strategy — drop entirely, or keep an HTML→pandoc fallback?
-      Revisit as part of Phase 2 planning.
 - [ ] How should renderer filter flags interact with themes — preprocess
       JSON in Rust before handing to the theme, or pass as theme
       parameters? Probably preprocess (keeps themes simple), but worth
