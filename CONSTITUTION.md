@@ -81,11 +81,14 @@ history. Users must be able to run this tool and know exactly where
 their data goes. The following are hard commitments; weakening any of
 them requires a constitutional amendment, not a feature PR.
 
-- **No network calls at render time.** `ferrocv render` and
-  `ferrocv validate` run fully offline. The only network-touching
-  operation is explicit, user-initiated theme fetching (e.g. pulling
-  a Typst Universe package), which is cached locally and never
-  triggered silently during a render.
+- **No network calls at runtime, full stop.** `ferrocv render` and
+  `ferrocv validate` are fully offline. Themes ship vendored in-tree
+  (`assets/themes/`) and are baked into the binary; the JSON Resume
+  schema is vendored the same way. The embedded Typst `World`
+  actively rejects any `@preview/...` package import rather than
+  fetching it. If a future feature needs a network-touching operation
+  (e.g. a package manager for out-of-tree themes), that is a
+  constitutional amendment, not a feature PR.
 - **No telemetry, ever.** No usage pings, no crash reports, no opt-in
   "help us improve" toggle, no analytics SDK. Not now, not later.
 - **Resume data never leaves the process.** We read `resume.json`, we
