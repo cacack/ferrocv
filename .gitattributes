@@ -1,0 +1,10 @@
+# Force LF line endings for golden-file fixtures so Windows checkouts
+# under `core.autocrlf=true` don't CRLF-ify them. Our golden tests
+# normalize line endings defensively, but pinning the on-disk bytes
+# makes the round-trip through `UPDATE_GOLDEN=1` stable on Windows.
+tests/goldens/** text eol=lf
+
+# Typst source under our vendored theme directories stays exactly as
+# upstream wrote it. Any line-ending rewrite would bloat the re-vendor
+# diff — see each theme's VENDORING.md.
+assets/themes/**/*.typ text eol=lf

@@ -1,0 +1,13 @@
+# typos-cli configuration.
+#
+# We keep vendored upstream sources under `assets/themes/` verbatim
+# (see each theme's VENDORING.md). Fixing upstream's typos inside the
+# vendored copy would fork the file from upstream and bloat the
+# re-vendor diff, so those files are excluded from typo-checking.
+# Run `typos` directly on the upstream repo if you want to report
+# fixes back to them.
+
+[files]
+extend-exclude = [
+    "assets/themes/**",
+]

@@ -5,11 +5,11 @@ Render [JSON Resume](https://jsonresume.org/) to PDF, HTML, and text via
 
 ## Status
 
-**Pre-implementation.** Work is tracked as [GitHub
-issues](https://github.com/cacack/ferrocv/issues), organized into phase
-milestones. Tracking issues stand in for future phases until their scope
-is activated. The non-negotiable design principles live in
-[`CONSTITUTION.md`](./CONSTITUTION.md).
+**Early.** PDF rendering via the `typst-jsonresume-cv` theme works today.
+HTML and plain-text output, additional themes, and native-theme tooling
+are tracked as [GitHub issues](https://github.com/cacack/ferrocv/issues)
+and organized into phase milestones. The non-negotiable design
+principles live in [`CONSTITUTION.md`](./CONSTITUTION.md).
 
 ## Why
 
@@ -35,20 +35,27 @@ schema and replaces the rendering pipeline with something more robust:
 
 ## Usage
 
-The only subcommand available today is `validate`, which checks a
-document against the bundled JSON Resume v1.0.0 schema. Exits `0` on
-valid input, `1` on schema violations (diagnostics on stderr), and `2`
-on IO or JSON parse errors.
-
 ```sh
-# From a file
+# Validate a resume against the JSON Resume schema
 ferrocv validate resume.json
 
-# From stdin
-cat resume.json | ferrocv validate
+# Render to PDF using the typst-jsonresume-cv theme
+ferrocv render resume.json --theme typst-jsonresume-cv --output resume.pdf
 ```
 
-No network is touched — the schema is compiled into the binary.
+`render` defaults to `--format pdf` (the only format in Phase 1; HTML
+and plain text are coming). When `--output` is omitted, the PDF is
+written to `dist/resume.pdf`; parent directories are created as needed.
+Both subcommands read from stdin if no path is given.
+
+Exit codes (same for both subcommands):
+
+- `0` — success
+- `1` — JSON parsed but failed schema validation (diagnostics on stderr)
+- `2` — IO error, JSON parse error, unknown theme/format, or render error
+
+No network is touched — the schema, theme, and fonts are all compiled
+into the binary.
 
 ## Development
 
