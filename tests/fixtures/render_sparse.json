@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json",
+  "basics": {
+    "name": "Grace Hopper",
+    "label": "Computer Scientist",
+    "summary": "Rear admiral and pioneer of computer programming."
+  },
+  "work": [
+    {
+      "name": "US Navy",
+      "position": "Rear Admiral",
+      "startDate": "1944-07-01",
+      "highlights": [
+        "Worked on the Mark I computer at Harvard.",
+        "Developed the first compiler for a computer programming language."
+      ]
+    }
+  ]
+}

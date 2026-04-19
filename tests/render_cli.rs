@@ -73,6 +73,43 @@ fn render_writes_pdf_to_output_path() {
     assert!(size > 1024, "PDF should be > 1 KiB, was {size} bytes");
 }
 
+/// Regression guard for CONSTITUTION §1 ("JSON Resume unmodified"): any
+/// resume that schema-validates must render, even if it omits optional
+/// fields the adapter's upstream template happens to reference.
+///
+/// `render_sparse.json` carries only `basics.name`, a brief `summary`,
+/// and one `work` entry — every other field is absent (no `meta`, no
+/// `basics.location`, no `basics.email`/`phone`, no `projects`, no
+/// `education`, no `skills`). JSON Resume v1.0.0 has zero required
+/// fields, so this is a valid document; the adapter must cope.
+#[test]
+fn render_accepts_sparse_schema_valid_resume() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_sparse"))
+        .arg("--theme")
+        .arg("typst-jsonresume-cv")
+        .arg("--format")
+        .arg("pdf")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    assert_eq!(
+        read_prefix(&out, 5),
+        b"%PDF-",
+        "output must start with the PDF magic bytes",
+    );
+    let size = std::fs::metadata(&out).expect("stat").len();
+    assert!(size > 1024, "PDF should be > 1 KiB, was {size} bytes");
+}
+
 #[test]
 fn render_rejects_unknown_theme_with_exit_two() {
     let tmp = tempfile::tempdir().expect("tempdir");
