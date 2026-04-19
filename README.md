@@ -49,6 +49,12 @@ ferrocv render resume.json --theme typst-jsonresume-cv --output resume.pdf
 ferrocv render resume.json --format text
 ```
 
+The quickest way to try it end-to-end is
+[`ferrocv-example`](https://github.com/cacack/ferrocv-example), a
+forkable starter template that renders its own `resume.json` to PDF
+on every push via GitHub Actions and publishes the result to GitHub
+Pages.
+
 `render` defaults to `--format pdf`; HTML output is tracked at #44.
 `--theme` is required for `--format pdf` and optional for
 `--format text` (defaults to `text-minimal`). When `--output` is
