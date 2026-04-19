@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/cacack/ferrocv/compare/v0.2.1...v0.3.0) (2026-04-19)
+
+
+### Features
+
+* **render:** add HTML output via --format html ([5b795a5](https://github.com/cacack/ferrocv/commit/5b795a55f0c61a7061c24b60d8ea789fce76d9ea))
+* **render:** add plain text output via --format text ([2321e20](https://github.com/cacack/ferrocv/commit/2321e20bb77d4b4b6059e811df2b8f869f91e431))
+* **themes:** add fantastic-cv theme adapter ([6b2ba42](https://github.com/cacack/ferrocv/commit/6b2ba4206ea38cf0eb553bac3ff7fb3cb211c438))
+* **themes:** add modern-cv theme adapter ([f654abd](https://github.com/cacack/ferrocv/commit/f654abdf4b8dc92c3190693b7b966d9af71abb75))
+
+
+### Bug Fixes
+
+* **themes/fantastic-cv:** guard link() against empty URLs ([1efcf1b](https://github.com/cacack/ferrocv/commit/1efcf1b1135e37349be59921c54aea6eb5b452eb))
+* **themes/text-minimal:** render all standard JSON Resume sections ([85d8f2f](https://github.com/cacack/ferrocv/commit/85d8f2f71a08119448023be5d1d19daaf4b7ac85))
+
 ## [0.2.1](https://github.com/cacack/ferrocv/compare/v0.2.0...v0.2.1) (2026-04-19)
 
 
