@@ -46,16 +46,23 @@ jobs:
         run: cargo clippy --all-targets --all-features -- -D warnings
 
   test:
-    name: cargo test
-    runs-on: ubuntu-latest
+    name: cargo test (${{ matrix.os }}, ${{ matrix.rust }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # MSRV mirrors Cargo.toml `rust-version`. Bump both together.
+        rust: [stable, "1.85"]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - id: detect
+        shell: bash
         run: echo "has_cargo=$([ -f Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - if: steps.detect.outputs.has_cargo == 'true'
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # stable
         with:
-          toolchain: stable
+          toolchain: ${{ matrix.rust }}
       - if: steps.detect.outputs.has_cargo == 'true'
         uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - if: steps.detect.outputs.has_cargo == 'true'
