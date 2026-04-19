@@ -144,10 +144,17 @@ const _: () = {
     assert!(!FANTASTIC_CV_PREFIX.is_empty());
 };
 
-/// Virtual-path prefix for the `text-minimal` native theme's files.
+/// Virtual path of the `text-minimal` theme's entrypoint.
 ///
-/// Same centralization rationale as [`TYPST_JSONRESUME_CV_PREFIX`].
-const TEXT_MINIMAL_PREFIX: &str = "/themes/text-minimal";
+/// Single per-file constant used by both the [`Theme::files`] key and
+/// the [`Theme::entrypoint`] field below, so the two cannot drift out
+/// of sync. This is the cleanup CodeRabbit flagged on the original PR
+/// — the previous "prefix" constant was declared but unused (the
+/// `concat!` calls hardcoded the literal), making the centralization
+/// claim cosmetic. The adapter above still uses the older
+/// prefix-as-const pattern; tightening it the same way is its own
+/// scope.
+const TEXT_MINIMAL_RESUME_PATH: &str = "/themes/text-minimal/resume.typ";
 
 /// `text-minimal` — a **native theme** (per CONSTITUTION §4) authored
 /// directly against the JSON Resume v1.0.0 schema, with no upstream
@@ -182,16 +189,10 @@ const TEXT_MINIMAL_PREFIX: &str = "/themes/text-minimal";
 pub const TEXT_MINIMAL: Theme = Theme {
     name: "text-minimal",
     files: &[(
-        // Must agree with TEXT_MINIMAL_PREFIX + "/resume.typ".
-        concat!("/themes/text-minimal", "/resume.typ"),
+        TEXT_MINIMAL_RESUME_PATH,
         include_bytes!("../assets/themes/text-minimal/resume.typ"),
     )],
-    entrypoint: concat!("/themes/text-minimal", "/resume.typ"),
-};
-
-// Compile-time sanity check, mirror of the one above for the adapter.
-const _: () = {
-    assert!(!TEXT_MINIMAL_PREFIX.is_empty());
+    entrypoint: TEXT_MINIMAL_RESUME_PATH,
 };
 
 /// All themes registered with this build of `ferrocv`.

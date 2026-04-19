@@ -87,6 +87,35 @@
       linebreak()
     }
   }
+  // basics.profiles — emit each as a contact-style line. Treated as
+  // header continuation rather than a separate section so the
+  // rendering matches how social profiles read on a real resume.
+  let profiles = opt(basics, "profiles")
+  if profiles != none and type(profiles) == array {
+    for profile in profiles {
+      let network = nz(opt(profile, "network"))
+      let username = nz(opt(profile, "username"))
+      let url = nz(opt(profile, "url"))
+      let label_part = if network != none and username != none {
+        network + ": " + username
+      } else if network != none {
+        network
+      } else if username != none {
+        username
+      } else { none }
+      let line = if label_part != none and url != none {
+        label_part + " - " + url
+      } else if label_part != none {
+        label_part
+      } else if url != none {
+        url
+      } else { none }
+      if line != none {
+        [#line]
+        linebreak()
+      }
+    }
+  }
   parbreak()
 }
 
@@ -231,6 +260,204 @@
     let dates = date_range(entry)
     if dates != none {
       [#dates]
+      linebreak()
+    }
+    parbreak()
+  }
+}
+
+// --- Volunteer -----------------------------------------------------
+#let volunteer = opt(resume, "volunteer")
+#if volunteer != none and type(volunteer) == array and volunteer.len() > 0 {
+  text(weight: "bold")[Volunteer]
+  parbreak()
+  for entry in volunteer {
+    let organization = nz(opt(entry, "organization"))
+    let position = nz(opt(entry, "position"))
+    let header = if organization != none and position != none {
+      position + " - " + organization
+    } else if organization != none {
+      organization
+    } else if position != none {
+      position
+    } else { none }
+    if header != none {
+      text(weight: "bold")[#header]
+      linebreak()
+    }
+    let dates = date_range(entry)
+    if dates != none {
+      [#dates]
+      linebreak()
+    }
+    let v_summary = nz(opt(entry, "summary"))
+    if v_summary != none {
+      [#v_summary]
+      linebreak()
+    }
+    let highlights = opt(entry, "highlights")
+    if highlights != none and type(highlights) == array {
+      for h in highlights {
+        if h != none and h != "" {
+          let prefixed = "- " + h
+          [#prefixed]
+          linebreak()
+        }
+      }
+    }
+    parbreak()
+  }
+}
+
+// --- Awards --------------------------------------------------------
+#let awards = opt(resume, "awards")
+#if awards != none and type(awards) == array and awards.len() > 0 {
+  text(weight: "bold")[Awards]
+  parbreak()
+  for entry in awards {
+    let title = nz(opt(entry, "title"))
+    if title != none {
+      text(weight: "bold")[#title]
+      linebreak()
+    }
+    let awarder = nz(opt(entry, "awarder"))
+    let date = nz(opt(entry, "date"))
+    let meta = join_present((awarder, date), " - ")
+    if meta != "" {
+      [#meta]
+      linebreak()
+    }
+    let a_summary = nz(opt(entry, "summary"))
+    if a_summary != none {
+      [#a_summary]
+      linebreak()
+    }
+    parbreak()
+  }
+}
+
+// --- Certificates --------------------------------------------------
+#let certificates = opt(resume, "certificates")
+#if certificates != none and type(certificates) == array and certificates.len() > 0 {
+  text(weight: "bold")[Certificates]
+  parbreak()
+  for entry in certificates {
+    let name = nz(opt(entry, "name"))
+    if name != none {
+      text(weight: "bold")[#name]
+      linebreak()
+    }
+    let issuer = nz(opt(entry, "issuer"))
+    let date = nz(opt(entry, "date"))
+    let meta = join_present((issuer, date), " - ")
+    if meta != "" {
+      [#meta]
+      linebreak()
+    }
+    let url = nz(opt(entry, "url"))
+    if url != none {
+      [#url]
+      linebreak()
+    }
+    parbreak()
+  }
+}
+
+// --- Publications --------------------------------------------------
+#let publications = opt(resume, "publications")
+#if publications != none and type(publications) == array and publications.len() > 0 {
+  text(weight: "bold")[Publications]
+  parbreak()
+  for entry in publications {
+    let name = nz(opt(entry, "name"))
+    if name != none {
+      text(weight: "bold")[#name]
+      linebreak()
+    }
+    let publisher = nz(opt(entry, "publisher"))
+    let release = nz(opt(entry, "releaseDate"))
+    let meta = join_present((publisher, release), " - ")
+    if meta != "" {
+      [#meta]
+      linebreak()
+    }
+    let url = nz(opt(entry, "url"))
+    if url != none {
+      [#url]
+      linebreak()
+    }
+    let p_summary = nz(opt(entry, "summary"))
+    if p_summary != none {
+      [#p_summary]
+      linebreak()
+    }
+    parbreak()
+  }
+}
+
+// --- Languages -----------------------------------------------------
+#let languages = opt(resume, "languages")
+#if languages != none and type(languages) == array and languages.len() > 0 {
+  text(weight: "bold")[Languages]
+  parbreak()
+  for entry in languages {
+    let language = nz(opt(entry, "language"))
+    let fluency = nz(opt(entry, "fluency"))
+    let line = if language != none and fluency != none {
+      language + " (" + fluency + ")"
+    } else if language != none {
+      language
+    } else if fluency != none {
+      fluency
+    } else { none }
+    if line != none {
+      [#line]
+      linebreak()
+    }
+  }
+  parbreak()
+}
+
+// --- Interests -----------------------------------------------------
+#let interests = opt(resume, "interests")
+#if interests != none and type(interests) == array and interests.len() > 0 {
+  text(weight: "bold")[Interests]
+  parbreak()
+  for entry in interests {
+    let name = nz(opt(entry, "name"))
+    let keywords = opt(entry, "keywords")
+    let keywords_str = if keywords != none and type(keywords) == array and keywords.len() > 0 {
+      keywords.filter(k => k != none and k != "").join(", ")
+    } else { none }
+    let line = if name != none and keywords_str != none and keywords_str != "" {
+      name + ": " + keywords_str
+    } else if name != none {
+      name
+    } else if keywords_str != none {
+      keywords_str
+    } else { none }
+    if line != none {
+      [#line]
+      linebreak()
+    }
+  }
+  parbreak()
+}
+
+// --- References ----------------------------------------------------
+#let references = opt(resume, "references")
+#if references != none and type(references) == array and references.len() > 0 {
+  text(weight: "bold")[References]
+  parbreak()
+  for entry in references {
+    let name = nz(opt(entry, "name"))
+    if name != none {
+      text(weight: "bold")[#name]
+      linebreak()
+    }
+    let reference = nz(opt(entry, "reference"))
+    if reference != none {
+      [#reference]
       linebreak()
     }
     parbreak()

@@ -10,6 +10,10 @@ https://example.com/ada
 
 London, England, GB
 
+GitHub: ada - https://github.example.com/ada
+
+LinkedIn: ada-lovelace - https://linkedin.example.com/in/ada-lovelace
+
 Summary
 
 Mathematician and writer, chiefly known for her work on Charles Babbage's proposed mechanical
@@ -55,3 +59,15 @@ machine.
 https://example.com/notes-g
 
 1842-01-01 - 1843-07-01
+
+Certificates
+
+Honorary Fellowship in Computing History
+
+Analytical Engines Ltd - 1843-09-01
+
+https://example.com/cert
+
+Interests
+
+Poetical Science: Imagination, Mathematics
