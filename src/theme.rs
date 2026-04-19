@@ -62,6 +62,13 @@ pub struct Theme {
 /// in [`TYPST_JSONRESUME_CV`] updates in one place.
 const TYPST_JSONRESUME_CV_PREFIX: &str = "/themes/typst-jsonresume-cv";
 
+/// Virtual-path prefix for this theme's files inside the World.
+///
+/// Centralized as a private `const` so the `files` and `entrypoint`
+/// fields stay in lockstep. If this prefix changes, every file path
+/// in [`FANTASTIC_CV`] updates in one place.
+const FANTASTIC_CV_PREFIX: &str = "/themes/fantastic-cv";
+
 /// Adapter for [`fruggiero/typst-jsonresume-cv`]'s `basic-resume`
 /// theme, vendored under `assets/themes/typst-jsonresume-cv/`.
 ///
@@ -99,11 +106,46 @@ const _: () = {
     assert!(!TYPST_JSONRESUME_CV_PREFIX.is_empty());
 };
 
+/// Adapter for [`austinyu/fantastic-cv`], vendored under
+/// `assets/themes/fantastic-cv/`.
+///
+/// The entrypoint is our authored glue `resume.typ`, which
+/// `#import`s the byte-for-byte vendored `fantastic-cv.typ` from the
+/// same virtual directory. All JSON-Resume → fantastic-cv field
+/// mapping lives in the glue; the vendored source is untouched. See
+/// `assets/themes/fantastic-cv/VENDORING.md` for the provenance record
+/// and the glue-not-patch rationale.
+///
+/// [`austinyu/fantastic-cv`]: https://github.com/austinyu/fantastic-cv
+pub const FANTASTIC_CV: Theme = Theme {
+    name: "fantastic-cv",
+    files: &[
+        (
+            // Must agree with FANTASTIC_CV_PREFIX + "/fantastic-cv.typ".
+            concat!("/themes/fantastic-cv", "/fantastic-cv.typ"),
+            include_bytes!("../assets/themes/fantastic-cv/fantastic-cv.typ"),
+        ),
+        (
+            concat!("/themes/fantastic-cv", "/resume.typ"),
+            include_bytes!("../assets/themes/fantastic-cv/resume.typ"),
+        ),
+    ],
+    entrypoint: concat!("/themes/fantastic-cv", "/resume.typ"),
+};
+
+// Compile-time sanity check: same shape as for TYPST_JSONRESUME_CV.
+const _: () = {
+    assert!(!FANTASTIC_CV_PREFIX.is_empty());
+};
+
 /// All themes registered with this build of `ferrocv`.
 ///
-/// Phase 1 ships one adapter. See the module doc for why this is a
-/// `&[&Theme]` rather than a `HashMap` or a builder pattern.
-pub const THEMES: &[&Theme] = &[&TYPST_JSONRESUME_CV];
+/// Two adapters are registered today (`typst-jsonresume-cv` and
+/// `fantastic-cv`). See the module doc for why this is a `&[&Theme]`
+/// rather than a `HashMap` or a builder pattern — a linear scan over
+/// a handful of entries is fine, and CONSTITUTION §5 calls for the
+/// narrower solution until a caller actually needs more.
+pub const THEMES: &[&Theme] = &[&TYPST_JSONRESUME_CV, &FANTASTIC_CV];
 
 /// Look up a [`Theme`] by name. Returns `None` for unknown names.
 ///
