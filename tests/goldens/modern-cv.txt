@@ -8,7 +8,7 @@ Experience
 
 Analytical Engines Ltd
 Programmer   1843-01-01 – 1852-11-27
-Translated and annotated Menabrea's paper on the Analytical Engine; wrote the first published algorithm intended for machine execution.• Published the first algorithm designed for a machine (Bernoulli numbers)
+Translated and annotated Menabrea's paper on the Analytical Engine; wrote the first published algorithm intended for machine  execution.• Published the first algorithm designed for a machine (Bernoulli numbers)
 • Introduced the concept of a general-purpose computing device
 Education
 
@@ -20,7 +20,7 @@ Notes on the Analytical Engine
 
 Expanded translation of Menabrea's sketch, including the first published algorithm for a computing machine.
 
-1842-01-01 –
+1842-01-01  –
 1843-07-01
 • Note G — the Bernoulli-number algorithm
 Certifications
