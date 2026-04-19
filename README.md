@@ -5,11 +5,13 @@ Render [JSON Resume](https://jsonresume.org/) to PDF, HTML, and text via
 
 ## Status
 
-**Early.** PDF rendering via the `typst-jsonresume-cv` theme works today.
-HTML and plain-text output, additional themes, and native-theme tooling
-are tracked as [GitHub issues](https://github.com/cacack/ferrocv/issues)
-and organized into phase milestones. The non-negotiable design
-principles live in [`CONSTITUTION.md`](./CONSTITUTION.md).
+**Early.** PDF and plain-text output work today (PDF via the
+`typst-jsonresume-cv` theme adapter, text via the native `text-minimal`
+theme). HTML output, additional themes, and native-theme tooling are
+tracked as [GitHub issues](https://github.com/cacack/ferrocv/issues)
+(HTML lives at #44) and organized into phase milestones. The
+non-negotiable design principles live in
+[`CONSTITUTION.md`](./CONSTITUTION.md).
 
 ## Why
 
@@ -41,11 +43,17 @@ ferrocv validate resume.json
 
 # Render to PDF using the typst-jsonresume-cv theme
 ferrocv render resume.json --theme typst-jsonresume-cv --output resume.pdf
+
+# Render to plain text (defaults to the native `text-minimal` theme;
+# `--theme` is optional for text)
+ferrocv render resume.json --format text
 ```
 
-`render` defaults to `--format pdf` (the only format in Phase 1; HTML
-and plain text are coming). When `--output` is omitted, the PDF is
-written to `dist/resume.pdf`; parent directories are created as needed.
+`render` defaults to `--format pdf`; HTML output is tracked at #44.
+`--theme` is required for `--format pdf` and optional for
+`--format text` (defaults to `text-minimal`). When `--output` is
+omitted, the output lands at `dist/resume.pdf` for PDF and
+`dist/resume.txt` for text; parent directories are created as needed.
 Both subcommands read from stdin if no path is given.
 
 Exit codes (same for both subcommands):
