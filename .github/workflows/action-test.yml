@@ -34,7 +34,9 @@ jobs:
 
       - name: render pdf
         shell: bash
-        run: ferrocv render tests/fixtures/render_full.json --format pdf --output dist/out.pdf
+        # --theme is explicit because v0.4.0 predates the text-minimal
+        # default; drop once we bump to a release that includes it.
+        run: ferrocv render tests/fixtures/render_full.json --format pdf --theme typst-jsonresume-cv --output dist/out.pdf
 
       - name: render html
         shell: bash
