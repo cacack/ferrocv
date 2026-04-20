@@ -47,9 +47,8 @@ enum Commands {
     /// Render a JSON Resume document to PDF, plain text, or HTML via
     /// the named theme.
     ///
-    /// `--theme` is optional for all formats; PDF, text, and HTML all
-    /// default to the native `text-minimal` theme so first-use works
-    /// out of the box.
+    /// `--theme` is optional for all formats. PDF and text default to
+    /// `text-minimal`; HTML defaults to `html-minimal`.
     ///
     /// HTML output uses Typst's experimental HTML export; output shape
     /// may shift across ferrocv releases when Typst is bumped. The CLI
@@ -120,14 +119,19 @@ enum Format {
 /// Resolve which theme name to use given the format and the optional
 /// `--theme` argument.
 ///
-/// Every format defaults to the native `text-minimal` theme when
-/// `--theme` is omitted, so first-use works out of the box without the
-/// user knowing any theme names. An explicit `--theme` always wins. A
-/// dedicated `html-minimal` semantic theme is a deliberate follow-up —
-/// see `research/44-html-viability.md` §7 for the rationale
-/// (text-minimal produces valid HTML that is good enough today).
-fn resolve_theme_name(_format: Format, requested: Option<&str>) -> &str {
-    requested.unwrap_or("text-minimal")
+/// PDF and text default to the native `text-minimal` theme. HTML
+/// defaults to the semantic-HTML native theme `html-minimal`. An
+/// explicit `--theme` always wins. See CONSTITUTION §3 for why each
+/// format gets its own native default rather than a single shared
+/// anchor.
+fn resolve_theme_name(format: Format, requested: Option<&str>) -> &str {
+    match requested {
+        Some(name) => name,
+        None => match format {
+            Format::Html => "html-minimal",
+            Format::Pdf | Format::Text => "text-minimal",
+        },
+    }
 }
 
 /// Default output path for a given format.
