@@ -10,9 +10,8 @@
 //!   - `validate`: document is valid
 //!   - `render`: PDF, text, or HTML written to `--output`
 //! - `1` — document parsed as JSON but failed schema validation
-//! - `2` — usage error (e.g. `--theme` missing for `--format pdf`),
-//!   IO error, malformed JSON, unknown theme, unknown format, or
-//!   Typst render error
+//! - `2` — usage error, IO error, malformed JSON, unknown theme,
+//!   unknown format, or Typst render error
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -48,10 +47,9 @@ enum Commands {
     /// Render a JSON Resume document to PDF, plain text, or HTML via
     /// the named theme.
     ///
-    /// `--theme` is required for `--format pdf` (no sensible default
-    /// adapter to pick). For `--format text` and `--format html` it
-    /// defaults to the native `text-minimal` theme so those outputs
-    /// work out of the box.
+    /// `--theme` is optional for all formats; PDF, text, and HTML all
+    /// default to the native `text-minimal` theme so first-use works
+    /// out of the box.
     ///
     /// HTML output uses Typst's experimental HTML export; output shape
     /// may shift across ferrocv releases when Typst is bumped. The CLI
@@ -60,14 +58,14 @@ enum Commands {
     /// Exit codes:
     /// - 0 — rendered successfully; output written to --output
     /// - 1 — JSON parsed but failed schema validation
-    /// - 2 — usage error (missing required `--theme` for pdf), IO
-    ///   error, parse error, unknown theme, or render error
+    /// - 2 — usage error, IO error, parse error, unknown theme, or
+    ///   render error
     Render {
         /// Path to a JSON Resume document. Reads stdin if omitted.
         path: Option<PathBuf>,
         /// Theme name. See the registered themes in `ferrocv::THEMES`.
-        /// Optional for `--format text` and `--format html` (both
-        /// default to `text-minimal`); required for `--format pdf`.
+        /// Optional for all formats; defaults to the native
+        /// `text-minimal` theme.
         #[arg(long)]
         theme: Option<String>,
         /// Output format: `pdf`, `text`, or `html`. Defaults to `pdf`.
@@ -122,21 +120,14 @@ enum Format {
 /// Resolve which theme name to use given the format and the optional
 /// `--theme` argument.
 ///
-/// Returns `Err` when the user must explicitly pick a theme but did not
-/// (currently only `--format pdf`). Returning `&'static str` for the
-/// error keeps allocation off the hot path; the caller prints it
-/// verbatim.
-fn resolve_theme_name(format: Format, requested: Option<&str>) -> Result<&str, &'static str> {
-    match (format, requested) {
-        (_, Some(name)) => Ok(name),
-        // Text and HTML both default to the native `text-minimal`
-        // theme. A dedicated `html-minimal` semantic theme is a
-        // deliberate follow-up — see `research/44-html-viability.md`
-        // §7 for the rationale (text-minimal produces valid HTML that
-        // is good enough for a first release).
-        (Format::Text, None) | (Format::Html, None) => Ok("text-minimal"),
-        (Format::Pdf, None) => Err("error: --theme is required for --format pdf"),
-    }
+/// Every format defaults to the native `text-minimal` theme when
+/// `--theme` is omitted, so first-use works out of the box without the
+/// user knowing any theme names. An explicit `--theme` always wins. A
+/// dedicated `html-minimal` semantic theme is a deliberate follow-up —
+/// see `research/44-html-viability.md` §7 for the rationale
+/// (text-minimal produces valid HTML that is good enough today).
+fn resolve_theme_name(_format: Format, requested: Option<&str>) -> &str {
+    requested.unwrap_or("text-minimal")
 }
 
 /// Default output path for a given format.
@@ -245,15 +236,10 @@ fn run_render(
     format: Format,
     output: Option<&Path>,
 ) -> Result<ExitCode> {
-    // Step 1: resolve theme name first. A missing `--theme` for pdf is
-    // a usage error and we want to fail before doing IO work.
-    let theme_name = match resolve_theme_name(format, theme_name) {
-        Ok(name) => name,
-        Err(msg) => {
-            eprintln!("{msg}");
-            return Ok(ExitCode::from(2));
-        }
-    };
+    // Step 1: resolve theme name first. Every format now has a default
+    // (`text-minimal`), so this is infallible — an explicit `--theme`
+    // overrides, otherwise the native default applies.
+    let theme_name = resolve_theme_name(format, theme_name);
 
     // Step 2: read input. IO failures bubble up via anyhow and main
     // maps them to exit code 2 (same as validate).
