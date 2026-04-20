@@ -1,0 +1,68 @@
+name: action-test
+
+on:
+  pull_request:
+    paths:
+      - '.github/actions/**'
+      - '.github/workflows/action-test.yml'
+      - 'tests/fixtures/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  setup-ferrocv:
+    name: setup-ferrocv (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: install ferrocv via local action
+        id: setup
+        uses: ./.github/actions/setup-ferrocv
+        with:
+          version: v0.4.0
+
+      - name: validate fixture
+        shell: bash
+        run: ferrocv validate tests/fixtures/valid_minimal.json
+
+      - name: render pdf
+        shell: bash
+        # --theme is explicit because v0.4.0 predates the text-minimal
+        # default; drop once we bump to a release that includes it.
+        run: ferrocv render tests/fixtures/render_full.json --format pdf --theme typst-jsonresume-cv --output dist/out.pdf
+
+      - name: render html
+        shell: bash
+        run: ferrocv render tests/fixtures/render_full.json --format html --output dist/out.html
+
+      - name: render text
+        shell: bash
+        run: ferrocv render tests/fixtures/render_full.json --format text --output dist/out.txt
+
+      - name: assert outputs exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          for f in dist/out.pdf dist/out.html dist/out.txt; do
+            if [ ! -s "$f" ]; then
+              echo "::error::missing or empty output: $f" >&2
+              exit 1
+            fi
+          done
+
+      - name: assert bin-path output is set
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin='${{ steps.setup.outputs.bin-path }}'
+          if [ -z "${bin}" ] || [ ! -x "${bin}" ]; then
+            echo "::error::bin-path output missing or not executable: ${bin}" >&2
+            exit 1
+          fi
