@@ -54,6 +54,9 @@ ferrocv render resume.json --format text
 # export is upstream-experimental; output shape may shift across
 # ferrocv releases when Typst is bumped.
 ferrocv render resume.json --format html
+
+# List bundled themes (machine-readable, one name per line)
+ferrocv themes list
 ```
 
 The quickest way to try it end-to-end is

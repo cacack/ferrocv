@@ -81,6 +81,29 @@ enum Commands {
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
     },
+    /// List themes bundled with this build.
+    ///
+    /// `themes list` prints theme names one per line, sorted
+    /// lexicographically, to stdout with no decoration — a stable
+    /// machine-readable contract.
+    ///
+    /// The nested-verb form (`themes list` rather than bare `themes`)
+    /// leaves room for a sibling `themes install <spec>` subcommand
+    /// when issue #41 adds remote-fetchable themes.
+    Themes {
+        #[command(subcommand)]
+        command: ThemesCommands,
+    },
+}
+
+/// Subcommands of `ferrocv themes`.
+///
+/// Nested-verb structure reserves space for a future
+/// `themes install <spec>` sibling (see issue #41).
+#[derive(Debug, Subcommand)]
+enum ThemesCommands {
+    /// List registered theme names, one per line, sorted.
+    List,
 }
 
 /// Output formats supported by `ferrocv render`.
@@ -141,7 +164,26 @@ pub fn run() -> Result<ExitCode> {
             format,
             output,
         } => run_render(path.as_deref(), theme.as_deref(), format, output.as_deref()),
+        Commands::Themes { command } => match command {
+            ThemesCommands::List => run_themes_list(),
+        },
     }
+}
+
+/// Print the names of every theme registered with this build, one per
+/// line, sorted lexicographically ascending, to stdout.
+///
+/// This is the machine-readable contract: no headers, no decoration,
+/// no extra whitespace. Shell pipelines depend on stability here.
+fn run_themes_list() -> Result<ExitCode> {
+    let mut names: Vec<&'static str> = THEMES.iter().map(|t| t.name).collect();
+    // `sort_unstable` is fine — theme names are unique, so stability
+    // on equal keys is moot.
+    names.sort_unstable();
+    for name in names {
+        println!("{name}");
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn run_validate(path: Option<&Path>) -> Result<ExitCode> {
