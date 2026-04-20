@@ -17,9 +17,11 @@
 //!   they give `ferrocv` visual variety without re-implementing a
 //!   full resume renderer.
 //! - **Native themes** implement a `render(data) -> content` contract
-//!   directly against parsed JSON Resume data. The `text-minimal`
-//!   theme below is the first native theme — it exists to feed clean
-//!   plain-text output to [`crate::render::compile_text`].
+//!   directly against parsed JSON Resume data. `text-minimal` feeds
+//!   clean plain-text output to [`crate::render::compile_text`];
+//!   `html-minimal` targets Typst's typed-HTML API
+//!   ([`crate::render::compile_html`]) with semantic `<section>` /
+//!   `<h2>` markup.
 //!
 //! Per CONSTITUTION §4 the two layers are kept separable: adapter
 //! code does not leak into native themes, and native themes do not
@@ -31,12 +33,13 @@
 //!
 //! # Why a static slice, not a `HashMap` or `ThemeRegistry`
 //!
-//! Phase 2 ships four themes total: three adapters
-//! (`typst-jsonresume-cv`, `fantastic-cv`, `modern-cv`) and one native
-//! theme (`text-minimal`). A linear scan over `THEMES` is O(n) for
-//! small n; CONSTITUTION §5 ("simple now, iterate later") calls for
-//! the narrower solution here. Generalizing to a hashed lookup or a
-//! builder pattern should wait for a caller that actually needs it.
+//! Phase 2 ships five themes total: three adapters
+//! (`typst-jsonresume-cv`, `fantastic-cv`, `modern-cv`) and two native
+//! themes (`text-minimal`, `html-minimal`). A linear scan over
+//! `THEMES` is O(n) for small n; CONSTITUTION §5 ("simple now,
+//! iterate later") calls for the narrower solution here. Generalizing
+//! to a hashed lookup or a builder pattern should wait for a caller
+//! that actually needs it.
 
 /// A themed Typst source bundle that [`crate::render::compile_theme`]
 /// can compile against a JSON Resume document.
@@ -237,20 +240,59 @@ pub const TEXT_MINIMAL: Theme = Theme {
     entrypoint: TEXT_MINIMAL_RESUME_PATH,
 };
 
+/// Virtual path of the `html-minimal` theme's entrypoint.
+///
+/// Single per-file constant used by both the [`Theme::files`] key and
+/// the [`Theme::entrypoint`] field below, so the two cannot drift out
+/// of sync. Mirrors the [`TEXT_MINIMAL_RESUME_PATH`] pattern.
+const HTML_MINIMAL_RESUME_PATH: &str = "/themes/html-minimal/resume.typ";
+
+/// `html-minimal` — a **native theme** (per CONSTITUTION §4) authored
+/// directly against the JSON Resume v1.0.0 schema and targeted at
+/// Typst's typed-HTML API (`html.elem`, `html.body`, …) through
+/// [`crate::render::compile_html`].
+///
+/// Where [`TEXT_MINIMAL`] optimizes for frame-walk text extraction
+/// (see its doc-comment for the single-column / no-dingbat rationale),
+/// `html-minimal` optimizes for **semantic HTML** output: resume
+/// sections are wrapped in `<section>` with `<h2>` headings, contact
+/// details land in a `<ul>`, and work/education entries use `<article>`
+/// so downstream ATS and web consumers can parse structure without
+/// regexing the text. It is deliberately *not* plain-text-extractable —
+/// that is `text-minimal`'s job, and CONSTITUTION §3 calls for each
+/// format to get its own sensible default rather than forcing a single
+/// theme to straddle both.
+///
+/// The MIT-licensed source under `assets/themes/html-minimal/` is
+/// also redistributable under the `ferrocv` crate's MIT-or-Apache-2.0
+/// dual license; the file-level `LICENSE` is duplicated so the theme
+/// remains self-contained if it is ever extracted into its own
+/// package.
+pub const HTML_MINIMAL: Theme = Theme {
+    name: "html-minimal",
+    files: &[(
+        HTML_MINIMAL_RESUME_PATH,
+        include_bytes!("../assets/themes/html-minimal/resume.typ"),
+    )],
+    entrypoint: HTML_MINIMAL_RESUME_PATH,
+};
+
 /// All themes registered with this build of `ferrocv`.
 ///
 /// Phase 2 ships three adapters (`typst-jsonresume-cv`, `fantastic-cv`,
-/// `modern-cv`) and one native theme (`text-minimal`). See the module
-/// doc for why this is a `&[&Theme]` rather than a `HashMap` or a
-/// builder pattern — a linear scan over a handful of entries is fine,
-/// and CONSTITUTION §5 calls for the narrower solution until a caller
-/// actually needs more. See the module doc as well for the §4
-/// deferral on splitting native themes into their own module.
+/// `modern-cv`) and two native themes (`text-minimal`, `html-minimal`).
+/// See the module doc for why this is a `&[&Theme]` rather than a
+/// `HashMap` or a builder pattern — a linear scan over a handful of
+/// entries is fine, and CONSTITUTION §5 calls for the narrower
+/// solution until a caller actually needs more. See the module doc as
+/// well for the §4 deferral on splitting native themes into their own
+/// module.
 pub const THEMES: &[&Theme] = &[
     &TYPST_JSONRESUME_CV,
     &FANTASTIC_CV,
     &MODERN_CV,
     &TEXT_MINIMAL,
+    &HTML_MINIMAL,
 ];
 
 /// Look up a [`Theme`] by name. Returns `None` for unknown names.
