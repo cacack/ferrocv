@@ -43,11 +43,14 @@ schema and replaces the rendering pipeline with something more robust:
 # Validate a resume against the JSON Resume schema
 ferrocv validate resume.json
 
-# Render to PDF using the typst-jsonresume-cv theme
+# Render to PDF (defaults to the native `text-minimal` theme;
+# `--theme` is optional)
+ferrocv render resume.json
+
+# Pick a visually richer PDF theme
 ferrocv render resume.json --theme typst-jsonresume-cv --output resume.pdf
 
-# Render to plain text (defaults to the native `text-minimal` theme;
-# `--theme` is optional for text)
+# Render to plain text (also defaults to `text-minimal`)
 ferrocv render resume.json --format text
 
 # Render to HTML (also defaults to `text-minimal`). Note: Typst's HTML
@@ -65,12 +68,12 @@ forkable starter template that renders its own `resume.json` to PDF
 on every push via GitHub Actions and publishes the result to GitHub
 Pages.
 
-`render` defaults to `--format pdf`. `--theme` is required for
-`--format pdf` and optional for `--format text` and `--format html`
-(both default to `text-minimal`). When `--output` is omitted, the
-output lands at `dist/resume.pdf` for PDF, `dist/resume.txt` for text,
-and `dist/resume.html` for HTML; parent directories are created as
-needed. `validate` and `render` read from stdin if no path is given.
+`render` defaults to `--format pdf`. `--theme` is optional for every
+format and defaults to the native `text-minimal` theme. When
+`--output` is omitted, the output lands at `dist/resume.pdf` for PDF,
+`dist/resume.txt` for text, and `dist/resume.html` for HTML; parent
+directories are created as needed. `validate` and `render` read from
+stdin if no path is given.
 
 `themes list` prints registered theme names to stdout, one per line,
 sorted lexicographically, with no decoration — a stable

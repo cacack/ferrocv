@@ -327,11 +327,13 @@ fn render_text_rejects_invalid_resume_with_exit_one() {
 }
 
 #[test]
-fn render_pdf_requires_theme_flag() {
+fn render_pdf_uses_text_minimal_when_theme_omitted() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = tmp.path().join("out.pdf");
 
-    // No `--theme`; explicit `--format pdf` (also the default).
+    // No `--theme`; explicit `--format pdf` (also the default). Since
+    // #52, PDF defaults to the native `text-minimal` theme like text
+    // and HTML do.
     ferrocv()
         .arg("render")
         .arg(fixture("render_full"))
@@ -340,12 +342,43 @@ fn render_pdf_requires_theme_flag() {
         .arg("--output")
         .arg(&out)
         .assert()
-        .code(2)
-        .stderr(predicate::str::contains("--theme is required"));
+        .success()
+        .stderr(predicate::str::is_empty());
 
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    assert_eq!(
+        read_prefix(&out, 5),
+        b"%PDF-",
+        "output must start with the PDF magic bytes",
+    );
+    let size = std::fs::metadata(&out).expect("stat").len();
+    assert!(size > 1024, "PDF should be > 1 KiB, was {size} bytes");
+}
+
+#[test]
+fn render_pdf_default_output_path_is_dist_resume_pdf() {
+    // No `--output`, no `--theme`, no `--format` (pdf is the default).
+    // `current_dir` is set to a tempdir so the default `dist/resume.pdf`
+    // lands under the temp tree rather than polluting the workspace.
+    let tmp = tempfile::tempdir().expect("tempdir");
+
+    ferrocv()
+        .current_dir(tmp.path())
+        .arg("render")
+        .arg(fixture("render_full"))
+        .assert()
+        .success();
+
+    let expected = tmp.path().join("dist/resume.pdf");
     assert!(
-        !out.exists(),
-        "no output file should be written when --theme is missing",
+        expected.exists(),
+        "default PDF output must land at <cwd>/dist/resume.pdf; expected {}",
+        expected.display()
+    );
+    assert_eq!(
+        read_prefix(&expected, 5),
+        b"%PDF-",
+        "default PDF output must start with the PDF magic bytes",
     );
 }
 

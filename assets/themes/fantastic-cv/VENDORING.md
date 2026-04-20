@@ -10,6 +10,10 @@ satisfies the constitutional no-network constraint (see
 
 [`austinyu/fantastic-cv`]: https://github.com/austinyu/fantastic-cv
 
+See also: [`../VENDORING_CHECKLIST.md`](../VENDORING_CHECKLIST.md) —
+the shared runbook for initial vendoring, re-vendoring, and Typst
+bumps.
+
 ## Provenance
 
 | Field                | Value                                                  |
