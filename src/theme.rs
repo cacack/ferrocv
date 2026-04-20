@@ -43,6 +43,27 @@
 //! iterate later") calls for the narrower solution here. Generalizing
 //! to a hashed lookup or a builder pattern should wait for a caller
 //! that actually needs it.
+//!
+//! # Theme resolution: bundled vs. local-path
+//!
+//! Issue #41's first stage introduces [`resolve_theme`], which takes
+//! the raw `--theme <spec>` string and returns a [`ResolvedTheme`] —
+//! an enum with two variants:
+//!
+//! - [`ResolvedTheme::Bundled`] wraps a `&'static` [`Theme`] picked
+//!   out of [`THEMES`] by name (the legacy path, byte-for-byte
+//!   equivalent to calling [`find_theme`]).
+//! - [`ResolvedTheme::Owned`] wraps an [`OwnedTheme`] assembled at
+//!   runtime from bytes the CLI read off the filesystem. v1 of the
+//!   local-path feature accepts a single `.typ` file; directory-based
+//!   themes are rejected with a clear error pointing at the follow-up
+//!   issue. No sibling imports, no package resolver — the file runs
+//!   under exactly the same Typst sandbox bundled themes do.
+//!
+//! `@preview/...` specs are recognized but deferred: in Stage A they
+//! return [`ThemeResolveError::PackageSpecDeferredToStageC`] so
+//! Stage B's installer and Stage C's cache reader land behind a clear
+//! contract.
 
 /// A themed Typst source bundle that [`crate::render::compile_theme`]
 /// can compile against a JSON Resume document.
@@ -56,6 +77,7 @@
 ///
 /// All fields are `'static` because themes are defined as `const`s
 /// and their contents come from [`include_bytes!`].
+#[derive(Debug)]
 pub struct Theme {
     /// Registry key. Matches the value passed to [`find_theme`].
     pub name: &'static str,
@@ -305,4 +327,459 @@ pub const THEMES: &[&Theme] = &[
 /// current handful of entries (CONSTITUTION §5).
 pub fn find_theme(name: &str) -> Option<&'static Theme> {
     THEMES.iter().copied().find(|t| t.name == name)
+}
+
+/// Virtual path a local-path `.typ` file is registered at inside the
+/// [`crate::render::FerrocvWorld`]. Keeping this centralized — rather
+/// than deriving it from the user-supplied path — means the file is
+/// served under a stable, predictable location regardless of where on
+/// disk it originated. Mirrors the `/themes/<name>/...` shape bundled
+/// themes use.
+const LOCAL_THEME_ENTRYPOINT: &str = "/themes/local/resume.typ";
+
+/// A Typst source bundle owned at runtime rather than baked into the
+/// binary.
+///
+/// Structural twin of [`Theme`] but with owned fields: strings and
+/// byte vectors instead of `&'static` references. Built by
+/// [`resolve_theme`] when the user points `--theme` at a local `.typ`
+/// file; downstream compilation goes through the same
+/// [`crate::render::FerrocvWorld`] path bundled themes do.
+///
+/// # Fields
+///
+/// - `name` — a human-readable identifier for diagnostics, e.g.
+///   `"local:/abs/path/to/resume.typ"`. Never collides with a bundled
+///   theme name because bundled names never contain `:` or `/`.
+/// - `files` — `(virtual_path, bytes)` pairs; same shape as
+///   [`Theme::files`] just with owned data. Virtual paths must begin
+///   with `/` and be unique.
+/// - `entrypoint` — virtual path of the file Typst starts compiling
+///   from. MUST appear as a key in `files`.
+///
+/// v1 of the local-path feature only ever populates one entry in
+/// `files`; the `Vec` shape is chosen so Stage C's cache-resolver can
+/// reuse [`OwnedTheme`] for multi-file `@preview/...` packages without
+/// another API churn.
+#[derive(Debug, Clone)]
+pub struct OwnedTheme {
+    /// Registry-key-equivalent identifier for diagnostics. Never
+    /// collides with bundled names.
+    pub name: String,
+    /// `(virtual_path, bytes)` pairs. Same invariants as
+    /// [`Theme::files`].
+    pub files: Vec<(String, Vec<u8>)>,
+    /// Virtual path of the file Typst starts compilation from. MUST
+    /// appear as a key in [`Self::files`].
+    pub entrypoint: String,
+}
+
+/// Outcome of [`resolve_theme`] — either a reference into the
+/// compile-time [`THEMES`] registry or an [`OwnedTheme`] assembled at
+/// runtime from user-supplied bytes.
+///
+/// Downstream code does not need to match on the variants; the helper
+/// methods ([`Self::name`], [`Self::entrypoint`], [`Self::files`])
+/// surface the uniform view every consumer needs. The render pipeline
+/// wraps each variant in an internal `ThemeBundle` trait impl (see
+/// `src/render.rs`) so Typst's `FerrocvWorld` can ingest both shapes
+/// without allocating a temporary [`Theme`].
+#[derive(Debug, Clone)]
+pub enum ResolvedTheme {
+    /// A theme picked out of the compile-time [`THEMES`] slice by
+    /// name. Byte-for-byte equivalent to the pre-#41 resolution path.
+    Bundled(&'static Theme),
+    /// A theme assembled at runtime from bytes the CLI read off the
+    /// filesystem (or, in Stage C, the local installer cache).
+    Owned(OwnedTheme),
+}
+
+impl ResolvedTheme {
+    /// Human-readable identifier for diagnostics.
+    ///
+    /// Bundled themes return their registry key; owned themes return
+    /// the synthetic `name` field (e.g. `"local:/abs/path/resume.typ"`).
+    pub fn name(&self) -> &str {
+        match self {
+            ResolvedTheme::Bundled(t) => t.name,
+            ResolvedTheme::Owned(o) => &o.name,
+        }
+    }
+
+    /// Virtual path of the file Typst starts compiling from.
+    pub fn entrypoint(&self) -> &str {
+        match self {
+            ResolvedTheme::Bundled(t) => t.entrypoint,
+            ResolvedTheme::Owned(o) => &o.entrypoint,
+        }
+    }
+
+    /// Iterate over `(virtual_path, bytes)` pairs for every file in
+    /// the resolved theme.
+    ///
+    /// Abstracts the two ownership shapes: bundled themes yield
+    /// `&'static [u8]` slices via [`Theme::files`]; owned themes yield
+    /// slices borrowed off their `Vec<u8>` entries. Callers get a
+    /// uniform borrowed view and never need to allocate.
+    pub fn files(&self) -> Box<dyn Iterator<Item = (&str, &[u8])> + '_> {
+        match self {
+            ResolvedTheme::Bundled(t) => Box::new(t.files.iter().map(|(p, b)| (*p, *b as &[u8]))),
+            ResolvedTheme::Owned(o) => {
+                Box::new(o.files.iter().map(|(p, b)| (p.as_str(), b.as_slice())))
+            }
+        }
+    }
+}
+
+/// Errors returned by [`resolve_theme`].
+///
+/// All variants map to CLI exit code 2 (usage/input error); the `cli`
+/// module owns that mapping. Each variant carries enough context that
+/// a single-line `error: ...` stderr message is actionable without a
+/// follow-up "why?" from the user.
+#[derive(Debug)]
+pub enum ThemeResolveError {
+    /// A bundled-style name (no path separators, no `.typ` suffix,
+    /// no `@preview/...` prefix) did not match any entry in
+    /// [`THEMES`]. The registered names are returned alongside so the
+    /// CLI can print a "did you mean..." hint.
+    NotFound {
+        /// The name the user typed.
+        name: String,
+        /// The names of every registered bundled theme, unsorted.
+        available: Vec<&'static str>,
+    },
+    /// A local-path spec resolved to an existing filesystem entry
+    /// that is not a regular `.typ` file — typically a directory or a
+    /// file without the `.typ` extension. Directory-based local themes
+    /// are tracked as a follow-up on issue #41.
+    LocalPathNotAFile {
+        /// The path the user typed, as given.
+        path: std::path::PathBuf,
+    },
+    /// A local-path spec pointed at a path that does not exist on the
+    /// filesystem.
+    LocalPathNotFound {
+        /// The path the user typed, as given.
+        path: std::path::PathBuf,
+    },
+    /// Reading a local-path `.typ` file failed for an IO reason other
+    /// than "not found" — e.g. permissions, a broken symlink, or an
+    /// unreadable device entry.
+    LocalPathIoError {
+        /// The path the user typed, as given.
+        path: std::path::PathBuf,
+        /// The underlying IO error.
+        source: std::io::Error,
+    },
+    /// A local-path `.typ` file contained bytes that are not valid
+    /// UTF-8. Typst source files are required to be UTF-8; this is a
+    /// clearer message than letting the compiler reject it later.
+    LocalPathNotUtf8 {
+        /// The path the user typed, as given.
+        path: std::path::PathBuf,
+    },
+    /// The user supplied an `@preview/<name>:<version>` spec. Stage A
+    /// of issue #41 recognizes these but defers resolution to Stage C;
+    /// the CLI prints a message pointing at the follow-up installer
+    /// subcommand that Stage B will land.
+    PackageSpecDeferredToStageC {
+        /// The raw spec the user typed.
+        spec: String,
+    },
+}
+
+impl std::fmt::Display for ThemeResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ThemeResolveError::NotFound { name, .. } => {
+                write!(f, "unknown theme `{name}`")
+            }
+            ThemeResolveError::LocalPathNotAFile { path } => write!(
+                f,
+                "local-path theme must point to a .typ file, not a directory or non-.typ file: {} \
+                 (directory-based local themes are tracked as a follow-up on issue #41; \
+                 for now concatenate your theme into a single .typ file)",
+                path.display()
+            ),
+            ThemeResolveError::LocalPathNotFound { path } => {
+                write!(f, "local-path theme not found: {}", path.display())
+            }
+            ThemeResolveError::LocalPathIoError { path, source } => write!(
+                f,
+                "failed to read local-path theme {}: {source}",
+                path.display()
+            ),
+            ThemeResolveError::LocalPathNotUtf8 { path } => write!(
+                f,
+                "local-path theme {} is not valid UTF-8 (Typst source files must be UTF-8)",
+                path.display()
+            ),
+            ThemeResolveError::PackageSpecDeferredToStageC { spec } => write!(
+                f,
+                "{spec} theme resolution arrives in stage C of issue #41; \
+                 for now install via the future `ferrocv theme install` command (stage B) \
+                 or vendor the theme manually under assets/themes/"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ThemeResolveError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ThemeResolveError::LocalPathIoError { source, .. } => Some(source),
+            _ => None,
+        }
+    }
+}
+
+/// Classify how a raw `--theme <spec>` string should be resolved.
+///
+/// Three variants, evaluated in this order: `@preview/...` specs come
+/// first (unambiguous prefix); path-indicative signals (leading `.` or
+/// `/`, a path separator anywhere in the string, or a `.typ` suffix)
+/// come next; everything else is treated as a bundled-theme name.
+enum ThemeSpecKind {
+    /// `@preview/<name>:<version>` — Typst Universe package spec;
+    /// Stage A defers resolution to Stage C.
+    PreviewPackage,
+    /// A filesystem path the CLI should read bytes from.
+    LocalPath,
+    /// A bundled theme name to look up in [`THEMES`].
+    BundledName,
+}
+
+/// Classify a `--theme` argument without performing any IO.
+fn classify_spec(spec: &str) -> ThemeSpecKind {
+    if spec.starts_with("@preview/") {
+        return ThemeSpecKind::PreviewPackage;
+    }
+    // Any explicit path-indicative signal routes to local-path mode.
+    // Bundled names contain only lowercase ASCII letters, digits, and
+    // hyphens by convention, so none of these signals misfires for a
+    // real bundled name.
+    let looks_like_path = spec.starts_with('.')
+        || spec.starts_with('/')
+        || spec.contains('/')
+        || spec.contains('\\')
+        || spec.ends_with(".typ");
+    if looks_like_path {
+        return ThemeSpecKind::LocalPath;
+    }
+    ThemeSpecKind::BundledName
+}
+
+/// Resolve a `--theme <spec>` string to a [`ResolvedTheme`].
+///
+/// Detection order (no IO performed until the path branch is taken):
+///
+/// 1. Specs starting with `@preview/` return
+///    [`ThemeResolveError::PackageSpecDeferredToStageC`]. Stage A
+///    recognizes the shape; Stage B's `ferrocv theme install`
+///    populates the local cache; Stage C wires render-time resolution
+///    against that cache.
+/// 2. Specs carrying path-indicative signals — a leading `.` or `/`,
+///    any `/` or `\` separator, or a `.typ` suffix — take the
+///    local-path branch: the CLI reads the bytes at the path,
+///    verifies it is a regular `.typ` file with valid UTF-8 content,
+///    and packages it into an [`OwnedTheme`] at a fixed virtual path.
+/// 3. Everything else is treated as a bundled-theme name and looked
+///    up in [`THEMES`]; unknown names return
+///    [`ThemeResolveError::NotFound`] with the full list of
+///    registered alternatives for hint generation.
+///
+/// # Errors
+///
+/// See [`ThemeResolveError`]. All errors are user-input failures and
+/// the CLI maps them to exit code 2.
+///
+/// # Offline guarantee
+///
+/// This function performs no network calls — the `@preview/...` branch
+/// fails fast without touching the filesystem or the network, upholding
+/// CONSTITUTION §6.1. Stage A introduces no network-capable code.
+pub fn resolve_theme(spec: &str) -> Result<ResolvedTheme, ThemeResolveError> {
+    match classify_spec(spec) {
+        ThemeSpecKind::PreviewPackage => Err(ThemeResolveError::PackageSpecDeferredToStageC {
+            spec: spec.to_owned(),
+        }),
+        ThemeSpecKind::LocalPath => resolve_local_path(spec),
+        ThemeSpecKind::BundledName => match find_theme(spec) {
+            Some(theme) => Ok(ResolvedTheme::Bundled(theme)),
+            None => Err(ThemeResolveError::NotFound {
+                name: spec.to_owned(),
+                available: THEMES.iter().map(|t| t.name).collect(),
+            }),
+        },
+    }
+}
+
+/// Read a local-path `.typ` file into an [`OwnedTheme`].
+///
+/// Keeps the IO isolated to one function so [`resolve_theme`] stays a
+/// clean dispatch. The caller has already classified `spec` as
+/// path-like; this function performs all the filesystem checks.
+fn resolve_local_path(spec: &str) -> Result<ResolvedTheme, ThemeResolveError> {
+    let path = std::path::PathBuf::from(spec);
+
+    // Use `try_exists` semantics: `metadata()` distinguishes "doesn't
+    // exist" from other IO failures (e.g. permission denied on a
+    // parent component). Keeping them separate gives clearer errors.
+    let metadata = match std::fs::metadata(&path) {
+        Ok(m) => m,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(ThemeResolveError::LocalPathNotFound { path });
+        }
+        Err(err) => {
+            return Err(ThemeResolveError::LocalPathIoError { path, source: err });
+        }
+    };
+
+    // v1 scope locks us to a single `.typ` file. Directories, symlinks
+    // to directories, and non-`.typ` regular files all fail here with
+    // a clear pointer to the follow-up issue.
+    let has_typ_extension = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.eq_ignore_ascii_case("typ"))
+        .unwrap_or(false);
+    if !metadata.is_file() || !has_typ_extension {
+        return Err(ThemeResolveError::LocalPathNotAFile { path });
+    }
+
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(err) => return Err(ThemeResolveError::LocalPathIoError { path, source: err }),
+    };
+
+    // Typst source must be UTF-8. Validate early so the user gets a
+    // pointed error rather than a cryptic compile diagnostic later.
+    if std::str::from_utf8(&bytes).is_err() {
+        return Err(ThemeResolveError::LocalPathNotUtf8 { path });
+    }
+
+    // Canonicalize the path for the display name so diagnostics and
+    // equality comparisons both see the fully-resolved form. Fall
+    // back to the user-supplied path if canonicalization fails (rare
+    // — implies the path was deleted between metadata and canonicalize).
+    let display_path = std::fs::canonicalize(&path).unwrap_or(path);
+    let name = format!("local:{}", display_path.display());
+
+    Ok(ResolvedTheme::Owned(OwnedTheme {
+        name,
+        files: vec![(LOCAL_THEME_ENTRYPOINT.to_owned(), bytes)],
+        entrypoint: LOCAL_THEME_ENTRYPOINT.to_owned(),
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Unit coverage for the bundled-vs-local-vs-preview detection
+    /// heuristic. Uses only pure-string classification (no IO) except
+    /// where the bundled-name branch needs a registry lookup.
+    #[test]
+    fn classify_spec_bundled_names() {
+        // Every real bundled name classifies as bundled.
+        for theme in THEMES {
+            assert!(
+                matches!(classify_spec(theme.name), ThemeSpecKind::BundledName),
+                "bundled theme `{}` must classify as BundledName",
+                theme.name,
+            );
+        }
+    }
+
+    #[test]
+    fn classify_spec_preview_packages() {
+        assert!(matches!(
+            classify_spec("@preview/basic-resume:0.2.8"),
+            ThemeSpecKind::PreviewPackage
+        ));
+        assert!(matches!(
+            classify_spec("@preview/foo:1.0.0"),
+            ThemeSpecKind::PreviewPackage
+        ));
+    }
+
+    #[test]
+    fn classify_spec_local_paths() {
+        // Leading `./` or `../`, absolute paths, subdirectory paths,
+        // and bare `.typ` suffixes all route to LocalPath.
+        for spec in [
+            "./resume.typ",
+            "../themes/mine.typ",
+            "/abs/path/to/theme.typ",
+            "subdir/theme.typ",
+            "theme.typ",
+            ".\\win\\path.typ",
+            "C:\\Users\\me\\theme.typ",
+        ] {
+            assert!(
+                matches!(classify_spec(spec), ThemeSpecKind::LocalPath),
+                "spec `{spec}` must classify as LocalPath",
+            );
+        }
+    }
+
+    #[test]
+    fn classify_spec_unknown_bundled_name_is_bundled() {
+        // A name with no path signals and no `@preview/` prefix stays
+        // classified as a bundled name; the registry lookup then
+        // fails with NotFound rather than being misrouted to the
+        // local-path branch.
+        assert!(matches!(
+            classify_spec("not-a-real-theme"),
+            ThemeSpecKind::BundledName
+        ));
+    }
+
+    #[test]
+    fn resolve_theme_bundled_name_hits_registry() {
+        let resolved = resolve_theme("text-minimal").expect("text-minimal is bundled");
+        assert_eq!(resolved.name(), "text-minimal");
+        match resolved {
+            ResolvedTheme::Bundled(_) => {}
+            _ => panic!("expected Bundled variant"),
+        }
+    }
+
+    #[test]
+    fn resolve_theme_unknown_bundled_name_returns_not_found() {
+        let err =
+            resolve_theme("definitely-not-a-theme").expect_err("unknown bundled names must error");
+        match err {
+            ThemeResolveError::NotFound { name, available } => {
+                assert_eq!(name, "definitely-not-a-theme");
+                assert!(!available.is_empty(), "available list must be non-empty");
+            }
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_theme_preview_spec_defers_to_stage_c() {
+        let err = resolve_theme("@preview/basic-resume:0.2.8")
+            .expect_err("preview specs must error in stage A");
+        match err {
+            ThemeResolveError::PackageSpecDeferredToStageC { spec } => {
+                assert_eq!(spec, "@preview/basic-resume:0.2.8");
+            }
+            other => panic!("expected PackageSpecDeferredToStageC, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn resolve_theme_missing_local_path_errors() {
+        let err = resolve_theme("/nonexistent/path/definitely-not-there.typ")
+            .expect_err("missing local paths must error");
+        match err {
+            ThemeResolveError::LocalPathNotFound { path } => {
+                assert!(path.to_string_lossy().contains("definitely-not-there.typ"));
+            }
+            other => panic!("expected LocalPathNotFound, got {other:?}"),
+        }
+    }
 }

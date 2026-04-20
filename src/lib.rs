@@ -7,9 +7,12 @@ pub mod theme;
 pub mod validate;
 
 pub use render::{
-    RenderDiagnostic, RenderError, compile_html, compile_pdf, compile_text, compile_theme,
+    RenderDiagnostic, RenderError, compile_html, compile_html_resolved, compile_pdf, compile_text,
+    compile_text_resolved, compile_theme, compile_theme_resolved,
 };
-pub use theme::{THEMES, Theme, find_theme};
+pub use theme::{
+    OwnedTheme, ResolvedTheme, THEMES, Theme, ThemeResolveError, find_theme, resolve_theme,
+};
 pub use validate::{ValidationError, validate_value};
 
 /// JSON Resume v1.0.0 schema, embedded at compile time.
