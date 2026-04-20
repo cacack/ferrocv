@@ -14,6 +14,7 @@
 //!   IO error, malformed JSON, unknown theme, unknown format, or
 //!   Typst render error
 
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -175,13 +176,25 @@ pub fn run() -> Result<ExitCode> {
 ///
 /// This is the machine-readable contract: no headers, no decoration,
 /// no extra whitespace. Shell pipelines depend on stability here.
+///
+/// Writes go through a locked `stdout` handle with explicit error
+/// handling rather than `println!` — a broken pipe (e.g.
+/// `ferrocv themes list | head`) is a normal IO error here, not a
+/// panic. Per the module-level exit-code contract, unrecoverable
+/// stdout write failures exit with code 2.
 fn run_themes_list() -> Result<ExitCode> {
     let mut names: Vec<&'static str> = THEMES.iter().map(|t| t.name).collect();
     // `sort_unstable` is fine — theme names are unique, so stability
     // on equal keys is moot.
     names.sort_unstable();
+
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
     for name in names {
-        println!("{name}");
+        if let Err(err) = writeln!(stdout, "{name}") {
+            eprintln!("error: failed to write theme list to stdout: {err}");
+            return Ok(ExitCode::from(2));
+        }
     }
     Ok(ExitCode::SUCCESS)
 }
