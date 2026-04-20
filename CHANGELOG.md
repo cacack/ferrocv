@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.5.0](https://github.com/cacack/ferrocv/compare/v0.4.0...v0.5.0) (2026-04-20)
+
+
+### Features
+
+* **action:** add setup-ferrocv composite action ([ed6abe9](https://github.com/cacack/ferrocv/commit/ed6abe9f77dd52f84c9deee385a80bc89ba84cec))
+* **cli:** default --theme to text-minimal for pdf rendering ([d41f517](https://github.com/cacack/ferrocv/commit/d41f51779e99a59a8fc50e8bfda918cdc57490b7)), closes [#52](https://github.com/cacack/ferrocv/issues/52)
+
+
+### Bug Fixes
+
+* **action:** prefer shasum when sha256sum is missing (macOS) ([10ec6a7](https://github.com/cacack/ferrocv/commit/10ec6a7f915de52f7b5e1fdd9787bf078065b0cf))
+* **action:** use target-named sha256 sidecar filename ([2ced855](https://github.com/cacack/ferrocv/commit/2ced855a270fde93c53404dc5e76c56819516311))
+
 ## [0.4.0](https://github.com/cacack/ferrocv/compare/v0.3.0...v0.4.0) (2026-04-20)
 
 
