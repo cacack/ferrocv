@@ -65,8 +65,8 @@ ferrocv themes list
 The quickest way to try it end-to-end is
 [`ferrocv-example`](https://github.com/cacack/ferrocv-example), a
 forkable starter template that renders its own `resume.json` to PDF
-on every push via GitHub Actions and publishes the result to GitHub
-Pages.
+on every push via GitHub Actions (using the `setup-ferrocv` composite
+action below) and publishes the result to GitHub Pages.
 
 `render` defaults to `--format pdf`. `--theme` is optional for every
 format and defaults to the native `text-minimal` theme. When
@@ -89,6 +89,40 @@ Exit codes (shared across subcommands):
 
 No network is touched — the schema, theme, and fonts are all compiled
 into the binary.
+
+## GitHub Actions
+
+A composite action at `.github/actions/setup-ferrocv` installs a pinned
+`ferrocv` release onto the runner's `PATH`. Once installed, call any
+subcommand directly — there are no dedicated `render` / `validate`
+wrappers, because the CLI invocations are already one-liners.
+
+```yaml
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cacack/ferrocv/.github/actions/setup-ferrocv@v0.4.0
+        with:
+          version: v0.4.0
+      - run: ferrocv validate resume.json
+      - run: ferrocv render resume.json --theme typst-jsonresume-cv --output dist/resume.pdf
+      - uses: actions/upload-artifact@v4
+        with:
+          name: resume
+          path: dist/resume.pdf
+```
+
+Supported runners today: `ubuntu-latest` (x86_64), `macos-14` (arm64),
+`windows-latest` (x86_64) — matching the release asset matrix. The
+action downloads the matching tarball/zip, verifies its SHA256 against
+the sidecar file published alongside each release, and installs the
+binary under `${{ runner.temp }}/ferrocv-bin`. It also exposes a
+`bin-path` output for workflows that need the absolute path.
+
+Pin the action ref and the `version:` input to the same release tag to
+avoid drift.
 
 ## Contributing
 

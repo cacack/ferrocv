@@ -1,0 +1,73 @@
+name: setup-ferrocv
+description: Download and install a pinned ferrocv release binary onto the runner's PATH.
+branding:
+  icon: file-text
+  color: orange
+
+inputs:
+  version:
+    description: "ferrocv release tag to install (e.g. v0.4.0). Required; no default, to force explicit pinning."
+    required: true
+
+outputs:
+  bin-path:
+    description: Absolute path to the installed ferrocv binary.
+    value: ${{ steps.install.outputs.bin-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: resolve target triple
+      id: target
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "${RUNNER_OS}-${RUNNER_ARCH}" in
+          Linux-X64)   target=x86_64-unknown-linux-gnu; ext=tar.gz ;;
+          macOS-ARM64) target=aarch64-apple-darwin;     ext=tar.gz ;;
+          Windows-X64) target=x86_64-pc-windows-msvc;   ext=zip    ;;
+          *)
+            echo "::error::setup-ferrocv: unsupported runner ${RUNNER_OS}/${RUNNER_ARCH}. Supported: Linux/X64, macOS/ARM64, Windows/X64." >&2
+            exit 1
+            ;;
+        esac
+        echo "target=${target}" >> "${GITHUB_OUTPUT}"
+        echo "ext=${ext}" >> "${GITHUB_OUTPUT}"
+
+    - name: download, verify, install
+      id: install
+      shell: bash
+      run: |
+        set -euo pipefail
+        version='${{ inputs.version }}'
+        target='${{ steps.target.outputs.target }}'
+        ext='${{ steps.target.outputs.ext }}'
+        asset="ferrocv-${target}.${ext}"
+        base="https://github.com/cacack/ferrocv/releases/download/${version}"
+
+        work="$(mktemp -d)"
+        bin_dir="${RUNNER_TEMP}/ferrocv-bin"
+        mkdir -p "${bin_dir}"
+
+        curl --proto '=https' --tlsv1.2 -fsSL -o "${work}/${asset}" "${base}/${asset}"
+        curl --proto '=https' --tlsv1.2 -fsSL -o "${work}/${asset}.sha256" "${base}/${asset}.sha256"
+
+        (cd "${work}" && sha256sum -c "${asset}.sha256")
+
+        if [ "${ext}" = "tar.gz" ]; then
+          tar -xzf "${work}/${asset}" -C "${bin_dir}" ferrocv
+          chmod +x "${bin_dir}/ferrocv"
+          bin_path="${bin_dir}/ferrocv"
+        else
+          unzip -o "${work}/${asset}" ferrocv.exe -d "${bin_dir}"
+          bin_path="${bin_dir}/ferrocv.exe"
+        fi
+
+        rm -rf "${work}"
+
+        echo "${bin_dir}" >> "${GITHUB_PATH}"
+        echo "bin-path=${bin_path}" >> "${GITHUB_OUTPUT}"
+
+    - name: verify installation
+      shell: bash
+      run: ferrocv --version
