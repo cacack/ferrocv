@@ -26,10 +26,13 @@
 //! Per CONSTITUTION §4 the two layers are kept separable: adapter
 //! code does not leak into native themes, and native themes do not
 //! depend on adapter internals. §4 also promises that native themes
-//! will eventually live in a dedicated module. For Phase 2, with one
-//! native theme to ship, that split would be premature abstraction
-//! (CONSTITUTION §5: "simple now, iterate later"); the split is
-//! deferred until a second native theme materializes.
+//! will eventually live in a dedicated module. For Phase 2, with two
+//! small native themes colocated here (`text-minimal` and
+//! `html-minimal`), splitting into a dedicated module would add
+//! scaffolding without saving anything — the themes share no Rust
+//! code, only a registration pattern. Extract when shared
+//! native-theme infrastructure actually warrants it (CONSTITUTION §5:
+//! "simple now, iterate later").
 //!
 //! # Why a static slice, not a `HashMap` or `ThemeRegistry`
 //!
@@ -228,9 +231,10 @@ const TEXT_MINIMAL_RESUME_PATH: &str = "/themes/text-minimal/resume.typ";
 /// package.
 ///
 /// CONSTITUTION §4 promises a separate native-themes module
-/// eventually. For Phase 2, with one native theme registered,
-/// splitting is premature abstraction (§5: "simple now, iterate
-/// later"); the split is deferred until a second native theme exists.
+/// eventually. For Phase 2, `text-minimal` and `html-minimal`
+/// colocate here without sharing Rust code; splitting would add
+/// scaffolding without paying for itself (§5: "simple now, iterate
+/// later"). See the module-level doc for the full rationale.
 pub const TEXT_MINIMAL: Theme = Theme {
     name: "text-minimal",
     files: &[(

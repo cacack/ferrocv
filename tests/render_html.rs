@@ -158,11 +158,17 @@ fn html_minimal_compiles_full_fixture_with_semantic_elements() {
 
     // URL fields must render as real anchors, not bare text. The
     // fixture carries both `mailto:` (basics.email) and `https://`
-    // (profiles, projects) URLs, so at least one of each scheme
-    // should survive into the output.
+    // (profiles, projects) URLs, so both schemes should survive —
+    // asserting them separately catches a regression in either class
+    // that an `||` would mask.
     assert!(
-        html.contains("<a href=\"http") || html.contains("<a href=\"mailto:"),
-        "html-minimal must render URL fields as anchors (http/mailto); got {} bytes",
+        html.contains("<a href=\"mailto:"),
+        "html-minimal must render email fields as mailto anchors; got {} bytes",
+        html.len(),
+    );
+    assert!(
+        html.contains("<a href=\"http"),
+        "html-minimal must render URL fields as http(s) anchors; got {} bytes",
         html.len(),
     );
 

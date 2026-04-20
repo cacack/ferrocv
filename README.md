@@ -6,8 +6,9 @@ Render [JSON Resume](https://jsonresume.org/) to PDF, HTML, and text via
 ## Status
 
 **Early.** PDF, plain-text, and HTML output all work today (PDF via
-any of the registered theme adapters, text and HTML via the native
-`text-minimal` theme by default). Additional themes and native-theme
+any registered PDF-capable theme, plain text via the native
+`text-minimal` default, and HTML via the native `html-minimal`
+semantic theme). Additional themes and native-theme
 tooling are tracked as
 [GitHub issues](https://github.com/cacack/ferrocv/issues) and
 organized into phase milestones. HTML uses Typst's upstream-experimental

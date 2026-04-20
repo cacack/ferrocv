@@ -63,8 +63,8 @@ enum Commands {
         /// Path to a JSON Resume document. Reads stdin if omitted.
         path: Option<PathBuf>,
         /// Theme name. See the registered themes in `ferrocv::THEMES`.
-        /// Optional for all formats; defaults to the native
-        /// `text-minimal` theme.
+        /// Optional for all formats. PDF and text default to
+        /// `text-minimal`; HTML defaults to `html-minimal`.
         #[arg(long)]
         theme: Option<String>,
         /// Output format: `pdf`, `text`, or `html`. Defaults to `pdf`.
@@ -241,8 +241,9 @@ fn run_render(
     output: Option<&Path>,
 ) -> Result<ExitCode> {
     // Step 1: resolve theme name first. Every format now has a default
-    // (`text-minimal`), so this is infallible — an explicit `--theme`
-    // overrides, otherwise the native default applies.
+    // (`text-minimal` for PDF/text, `html-minimal` for HTML), so this
+    // is infallible — an explicit `--theme` overrides, otherwise the
+    // native default applies.
     let theme_name = resolve_theme_name(format, theme_name);
 
     // Step 2: read input. IO failures bubble up via anyhow and main
