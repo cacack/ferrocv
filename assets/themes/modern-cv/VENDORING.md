@@ -10,6 +10,10 @@ lives under §4 (adapter layer kept separable).
 
 [`DeveloperPaul123/modern-cv`]: https://github.com/DeveloperPaul123/modern-cv
 
+See also: [`../VENDORING_CHECKLIST.md`](../VENDORING_CHECKLIST.md) —
+the shared runbook for initial vendoring, re-vendoring, and Typst
+bumps.
+
 ## Provenance
 
 | Field                | Value                                                                  |

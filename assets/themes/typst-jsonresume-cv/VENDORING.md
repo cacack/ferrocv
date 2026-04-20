@@ -7,6 +7,10 @@ Resume bytes from the path `ferrocv`'s Typst `World` serves them under.
 
 [`fruggiero/typst-jsonresume-cv`]: https://github.com/fruggiero/typst-jsonresume-cv
 
+See also: [`../VENDORING_CHECKLIST.md`](../VENDORING_CHECKLIST.md) —
+the shared runbook for initial vendoring, re-vendoring, and Typst
+bumps.
+
 ## Provenance
 
 | Field       | Value                                                                 |
@@ -198,6 +202,59 @@ before handing it to Typst) at that point.
 - Section builders (`work`, `edu`, `projects`,
   `cumulativeCertSkillsInterests`) — untouched.
 - Multilingual `section_titles` dictionary — untouched.
+
+## Empty-URL safety audit
+
+**Audit date:** 2026-04-20. **Outcome:** safe by construction; no
+patch required.
+
+Typst `link("")` is a fatal error in 0.14.x, and JSON Resume v1.0.0
+makes every `url` field optional, so every vendored adapter gets an
+empty-URL audit on vendor and on re-vendor. See
+[`../VENDORING_CHECKLIST.md`](../VENDORING_CHECKLIST.md) §2 for the
+shared procedure; this section records the outcome for this theme.
+
+```sh
+$ grep -n "link(" assets/themes/typst-jsonresume-cv/*.typ
+assets/themes/typst-jsonresume-cv/base.typ:152:        link(link-type + value)[#(prefix + value)]
+```
+
+One and only one `link(...)` call site, inside the `contact-item`
+helper defined at `base.typ:149`:
+
+```typst
+let contact-item(value, prefix: "", link-type: "") = {
+  if value != "" {
+    if link-type != "" {
+      link(link-type + value)[#(prefix + value)]
+    } else {
+      value
+    }
+  }
+}
+```
+
+The outer `if value != ""` guard means `link()` is never invoked with
+an empty string. The glue `resume.typ` populates every caller via
+`.at("email", default: "")`, `.at("phone", default: "")`,
+`.at("github", default: "")`, etc. — empty-string defaults flow
+cleanly through the guard. The top-level `basics.url` field is
+handled via a separate `website != none` check upstream and never
+reaches `contact-item`.
+
+`resume.typ` itself has zero `link(` call sites (grep-verified), so
+the audit surface is exactly the one call above.
+
+**Regression test:** `render_accepts_sparse_schema_valid_resume` in
+`tests/render_cli.rs` renders `tests/fixtures/render_sparse.json`
+(only `basics.name` plus one `work` entry, no URLs) through this
+theme to PDF and asserts the output is a valid PDF. Any future patch
+that weakens the `if value != ""` guard will fail that test.
+
+**Re-vendor obligation:** re-run the grep above after every upstream
+bump. If a new `link(` call site appears, trace its argument back to
+its source; if the source can ever be an empty string, apply an
+empty-URL guard before committing.
 
 ## Updating
 
