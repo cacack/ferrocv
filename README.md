@@ -1,5 +1,15 @@
 # ferrocv
 
+[![CI](https://github.com/cacack/ferrocv/actions/workflows/ci.yml/badge.svg)](https://github.com/cacack/ferrocv/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/ferrocv.svg)](https://crates.io/crates/ferrocv)
+[![docs.rs](https://img.shields.io/docsrs/ferrocv)](https://docs.rs/ferrocv)
+[![Downloads](https://img.shields.io/crates/d/ferrocv)](https://crates.io/crates/ferrocv)
+[![License](https://img.shields.io/crates/l/ferrocv)](#license)
+[![MSRV](https://img.shields.io/badge/MSRV-1.89-orange)](Cargo.toml)
+[![Dependencies](https://deps.rs/repo/github/cacack/ferrocv/status.svg)](https://deps.rs/repo/github/cacack/ferrocv)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/cacack/ferrocv/badge)](https://scorecard.dev/viewer/?uri=github.com/cacack/ferrocv)
+[![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://www.conventionalcommits.org)
+
 Render [JSON Resume](https://jsonresume.org/) to PDF, HTML, and text via
 [Typst](https://typst.app/) — single static binary, no Node or TeX required.
 
