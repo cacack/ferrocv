@@ -1,6 +1,7 @@
 # ferrocv
 
 [![CI](https://github.com/cacack/ferrocv/actions/workflows/ci.yml/badge.svg)](https://github.com/cacack/ferrocv/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/cacack/ferrocv/actions/workflows/codeql.yml/badge.svg)](https://github.com/cacack/ferrocv/actions/workflows/codeql.yml)
 [![crates.io](https://img.shields.io/crates/v/ferrocv.svg)](https://crates.io/crates/ferrocv)
 [![docs.rs](https://img.shields.io/docsrs/ferrocv)](https://docs.rs/ferrocv)
 [![Downloads](https://img.shields.io/crates/d/ferrocv)](https://crates.io/crates/ferrocv)
