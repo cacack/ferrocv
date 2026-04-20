@@ -54,6 +54,9 @@ ferrocv render resume.json --format text
 # export is upstream-experimental; output shape may shift across
 # ferrocv releases when Typst is bumped.
 ferrocv render resume.json --format html
+
+# List bundled themes (machine-readable, one name per line)
+ferrocv themes list
 ```
 
 The quickest way to try it end-to-end is
@@ -67,13 +70,19 @@ Pages.
 (both default to `text-minimal`). When `--output` is omitted, the
 output lands at `dist/resume.pdf` for PDF, `dist/resume.txt` for text,
 and `dist/resume.html` for HTML; parent directories are created as
-needed. Both subcommands read from stdin if no path is given.
+needed. `validate` and `render` read from stdin if no path is given.
 
-Exit codes (same for both subcommands):
+`themes list` prints registered theme names to stdout, one per line,
+sorted lexicographically, with no decoration — a stable
+machine-readable contract.
+
+Exit codes (shared across subcommands):
 
 - `0` — success
-- `1` — JSON parsed but failed schema validation (diagnostics on stderr)
-- `2` — IO error, JSON parse error, unknown theme/format, or render error
+- `1` — JSON parsed but failed schema validation (`validate` / `render`;
+  diagnostics on stderr)
+- `2` — usage error, IO error, JSON parse error, unknown theme/format,
+  render error, or unrecoverable stdout write failure
 
 No network is touched — the schema, theme, and fonts are all compiled
 into the binary.
