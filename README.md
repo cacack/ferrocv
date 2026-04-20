@@ -6,8 +6,9 @@ Render [JSON Resume](https://jsonresume.org/) to PDF, HTML, and text via
 ## Status
 
 **Early.** PDF, plain-text, and HTML output all work today (PDF via
-any of the registered theme adapters, text and HTML via the native
-`text-minimal` theme by default). Additional themes and native-theme
+any registered PDF-capable theme, plain text via the native
+`text-minimal` default, and HTML via the native `html-minimal`
+semantic theme). Additional themes and native-theme
 tooling are tracked as
 [GitHub issues](https://github.com/cacack/ferrocv/issues) and
 organized into phase milestones. HTML uses Typst's upstream-experimental
@@ -53,9 +54,9 @@ ferrocv render resume.json --theme typst-jsonresume-cv --output resume.pdf
 # Render to plain text (also defaults to `text-minimal`)
 ferrocv render resume.json --format text
 
-# Render to HTML (also defaults to `text-minimal`). Note: Typst's HTML
-# export is upstream-experimental; output shape may shift across
-# ferrocv releases when Typst is bumped.
+# Render to HTML (defaults to the native `html-minimal` semantic theme).
+# Note: Typst's HTML export is upstream-experimental; output shape may
+# shift across ferrocv releases when Typst is bumped.
 ferrocv render resume.json --format html
 
 # List bundled themes (machine-readable, one name per line)
@@ -69,7 +70,8 @@ on every push via GitHub Actions (using the `setup-ferrocv` composite
 action below) and publishes the result to GitHub Pages.
 
 `render` defaults to `--format pdf`. `--theme` is optional for every
-format and defaults to the native `text-minimal` theme. When
+format: PDF and text default to the native `text-minimal` theme, while
+HTML defaults to the native `html-minimal` semantic theme. When
 `--output` is omitted, the output lands at `dist/resume.pdf` for PDF,
 `dist/resume.txt` for text, and `dist/resume.html` for HTML; parent
 directories are created as needed. `validate` and `render` read from

@@ -471,10 +471,16 @@ fn render_writes_html_to_output_path() {
 }
 
 #[test]
-fn render_html_uses_text_minimal_when_theme_omitted() {
+fn render_html_uses_html_minimal_when_theme_omitted() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = tmp.path().join("out.html");
 
+    // Since #64, `--format html` without an explicit `--theme`
+    // defaults to the native `html-minimal` theme (not `text-minimal`
+    // like PDF and text). The semantic-element assertion below is
+    // what distinguishes the two: `text-minimal` emits no `<h2>` or
+    // `<section>` tags in its HTML export, so this assertion would
+    // fail if the default-theme wiring regressed.
     ferrocv()
         .arg("render")
         .arg(fixture("render_full"))
@@ -491,6 +497,13 @@ fn render_html_uses_text_minimal_when_theme_omitted() {
     assert!(
         body.contains("Ada Lovelace"),
         "HTML output must contain the rendered name"
+    );
+    assert!(
+        body.contains("<h2") || body.contains("<section"),
+        "default-theme HTML must include a semantic element (<h2 or <section); \
+         got {} bytes starting:\n{}",
+        body.len(),
+        body.chars().take(200).collect::<String>(),
     );
 }
 
@@ -547,8 +560,13 @@ fn render_html_accepts_resume_on_stdin() {
     let input =
         std::fs::read_to_string(fixture("render_full")).expect("fixture `render_full.json`");
 
+    // `--theme text-minimal` is explicit here so this test exercises
+    // only the stdin-ingest path; if HTML defaults are ever rerouted
+    // again, this test stays stable.
     ferrocv()
         .arg("render")
+        .arg("--theme")
+        .arg("text-minimal")
         .arg("--format")
         .arg("html")
         .arg("--output")
@@ -622,5 +640,41 @@ fn render_html_modern_cv_happy_path() {
     assert!(
         size > 0,
         "HTML output should be non-empty, was {size} bytes"
+    );
+}
+
+/// Native HTML happy-path: `html-minimal` (added in #64) is the
+/// default for `--format html`, but explicitly selecting it via
+/// `--theme` should also work. The `<h2` check distinguishes this
+/// theme from `text-minimal`, which emits no semantic headings.
+#[test]
+fn render_html_html_minimal_happy_path() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.html");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg("html-minimal")
+        .arg("--format")
+        .arg("html")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    let size = std::fs::metadata(&out).expect("stat").len();
+    assert!(
+        size > 0,
+        "HTML output should be non-empty, was {size} bytes"
+    );
+    let body = std::fs::read_to_string(&out).expect("HTML output must be UTF-8");
+    assert!(
+        body.contains("<h2"),
+        "html-minimal must emit at least one <h2 element; got {} bytes",
+        body.len(),
     );
 }
