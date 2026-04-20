@@ -209,5 +209,8 @@ To re-vendor from a newer upstream:
 3. Re-apply the two patches above. A quick grep for `@preview/` and
    `../../output/` in the copied files catches both.
 4. Update the commit SHA and vendor date in this file.
-5. Run the render tests (`cargo test --test render`) and, once the
-   golden test lands from issue #12, its golden fixture.
+5. Regenerate goldens and inspect the diff before committing:
+
+    ```sh
+    UPDATE_GOLDEN=1 cargo test --test render_theme
+    ```
