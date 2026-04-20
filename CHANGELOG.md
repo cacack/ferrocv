@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/cacack/ferrocv/compare/v0.3.0...v0.4.0) (2026-04-20)
+
+
+### Features
+
+* **cli:** add `themes list` subcommand ([89a29ab](https://github.com/cacack/ferrocv/commit/89a29ab4b76bc71e58da2628d028c5f308a386d6))
+
+
+### Bug Fixes
+
+* **cli:** exit 2 on `themes list` stdout write failure ([732c595](https://github.com/cacack/ferrocv/commit/732c595bece6d0dd52e2568b948f370237db6cf7))
+
 ## [0.3.0](https://github.com/cacack/ferrocv/compare/v0.2.1...v0.3.0) (2026-04-19)
 
 
