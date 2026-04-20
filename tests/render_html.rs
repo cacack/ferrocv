@@ -13,11 +13,14 @@
 //!   ends with `</html>`, contains a `<body>...</body>` pair in
 //!   the right order).
 //! - Content presence (the fixture's name string makes it through).
-//! - External-reference negation (no `src=`, no `href=` except
-//!   anchor links, no `<link rel`, no `@font-face`, no `url(`) —
-//!   guards against a future Typst bump silently turning on
-//!   external assets, which would break CONSTITUTION §6.1's
-//!   "single-file output" promise.
+//! - External-asset negation (no `src=`, no `<link rel`, no
+//!   `@font-face`, no `url(`) — guards against a future Typst bump
+//!   silently turning on external assets, which would break
+//!   CONSTITUTION §6.1's "single-file output" promise. `href` values
+//!   (fragment anchors, `mailto:`, `tel:`, `http(s)://`) are *not*
+//!   external assets — they are inert link targets that the user's
+//!   agent decides whether to follow — so we deliberately do not
+//!   restrict their scheme.
 //!
 //! Runs the real embedded Typst compiler via
 //! [`ferrocv::compile_html`] (doctrine §4: no mocking Typst).
@@ -77,10 +80,12 @@ fn html_compiles_full_fixture_to_well_formed_html() {
         html.len(),
     );
 
-    // External-reference negation. A regression that silently turns
-    // on external CSS, fonts, or images would break the single-file
+    // External-asset negation. A regression that silently turns on
+    // external CSS, fonts, or images would break the single-file
     // guarantee (see CONSTITUTION §6.1 and research/44-html-viability.md
-    // §5). Fragment-only `href="#..."` anchors are allowed.
+    // §5). `href` values are intentionally *not* restricted — a
+    // `mailto:` or `https://` anchor is an inert link target, not an
+    // external asset fetched at render or display time.
     assert!(
         !html.contains("src=\""),
         "HTML must not contain any `src=\"...\"` references; found one in:\n{}",
@@ -93,22 +98,102 @@ fn html_compiles_full_fixture_to_well_formed_html() {
             preview(&html, bad),
         );
     }
-    // Scan every `href="..."` and reject any that is not a fragment
-    // anchor. Iterative search keeps the assertion honest without
-    // pulling in an HTML parser.
-    let mut rest = html.as_str();
-    while let Some(idx) = rest.find("href=\"") {
-        let after = &rest[idx + 6..];
-        // The first char after `href="` must be `#` for the link to
-        // count as a fragment-only anchor.
-        let first_char = after.chars().next();
+}
+
+#[test]
+fn html_minimal_compiles_full_fixture_with_semantic_elements() {
+    let data = read_fixture("tests/fixtures/render_full.json");
+    let theme = ferrocv::find_theme("html-minimal").expect("html-minimal must be registered");
+
+    let html = ferrocv::compile_html(theme, &data)
+        .expect("html-minimal must compile render_full.json to HTML");
+
+    // Structural well-formedness (same posture as the text-minimal
+    // test above — substring search rather than HTML parsing).
+    assert!(
+        html.starts_with("<!DOCTYPE html>"),
+        "HTML must begin with <!DOCTYPE html>; got first 80 chars:\n{}",
+        html.chars().take(80).collect::<String>(),
+    );
+    assert!(
+        html.trim_end().ends_with("</html>"),
+        "HTML must end with </html> (after trimming); got last 80 chars:\n{}",
+        html.chars()
+            .rev()
+            .take(80)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>(),
+    );
+
+    let body_open = html
+        .find("<body>")
+        .expect("HTML must contain a <body> opening tag");
+    let body_close = html
+        .find("</body>")
+        .expect("HTML must contain a </body> closing tag");
+    assert!(
+        body_open < body_close,
+        "<body> must appear before </body>; got body_open={body_open}, body_close={body_close}",
+    );
+
+    // Content presence.
+    assert!(
+        html.contains("Ada Lovelace"),
+        "HTML must contain the fixture's name 'Ada Lovelace'; got {} bytes",
+        html.len(),
+    );
+
+    // Semantic elements — the reason html-minimal exists. Tag-prefix
+    // matching (`<h2`, `<section`, etc., no closing `>`) tolerates
+    // optional attributes across Typst minor versions.
+    for tag in ["<h2", "<section", "<header", "<main"] {
         assert!(
-            matches!(first_char, Some('#')),
-            "HTML href must be a fragment anchor (`#...`) only; found href starting with {first_char:?} in:\n{}",
-            preview(rest, "href=\""),
+            html.contains(tag),
+            "html-minimal must emit at least one `{tag}` element; got {} bytes",
+            html.len(),
         );
-        rest = &after[1..];
     }
+
+    // URL fields must render as real anchors, not bare text. The
+    // fixture carries both `mailto:` (basics.email) and `https://`
+    // (profiles, projects) URLs, so at least one of each scheme
+    // should survive into the output.
+    assert!(
+        html.contains("<a href=\"http") || html.contains("<a href=\"mailto:"),
+        "html-minimal must render URL fields as anchors (http/mailto); got {} bytes",
+        html.len(),
+    );
+
+    // External-asset negation: same guards as the text-minimal test.
+    assert!(
+        !html.contains("src=\""),
+        "HTML must not contain any `src=\"...\"` references; found one in:\n{}",
+        preview(&html, "src=\""),
+    );
+    for bad in ["<link rel", "@font-face", "url("] {
+        assert!(
+            !html.contains(bad),
+            "HTML must not contain `{bad}`; found one in:\n{}",
+            preview(&html, bad),
+        );
+    }
+}
+
+#[test]
+fn html_minimal_compiles_sparse_fixture_without_errors() {
+    let data = read_fixture("tests/fixtures/render_sparse.json");
+    let theme = ferrocv::find_theme("html-minimal").expect("html-minimal must be registered");
+
+    let html = ferrocv::compile_html(theme, &data)
+        .expect("html-minimal must compile render_sparse.json to HTML");
+
+    assert!(
+        html.contains("Grace Hopper"),
+        "HTML must contain the sparse fixture's name 'Grace Hopper'; got {} bytes",
+        html.len(),
+    );
 }
 
 #[test]
