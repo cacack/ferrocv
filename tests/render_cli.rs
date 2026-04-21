@@ -34,6 +34,15 @@ fn fixture(name: &str) -> PathBuf {
     path
 }
 
+/// Absolute path to a non-JSON fixture (e.g. a `.typ` theme source).
+fn typ_fixture(name: &str) -> PathBuf {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("tests");
+    path.push("fixtures");
+    path.push(name);
+    path
+}
+
 /// Build a `Command` for the `ferrocv` binary under test.
 fn ferrocv() -> Command {
     Command::cargo_bin("ferrocv").expect("binary `ferrocv` must be built")
@@ -676,5 +685,220 @@ fn render_html_html_minimal_happy_path() {
         body.contains("<h2"),
         "html-minimal must emit at least one <h2 element; got {} bytes",
         body.len(),
+    );
+}
+
+// --- Local-path theme scenarios ----------------------------------------
+//
+// Stage A of issue #41: `--theme <path>` accepts a local `.typ` file in
+// addition to a bundled theme name. These tests exercise the
+// observable CLI contract (exit code, stderr, output file presence and
+// content). Detection-order unit tests live next to the implementation
+// in `src/theme.rs`.
+
+/// Happy path: absolute path to a local `.typ` fixture compiles and
+/// produces a PDF whose byte stream contains the resume name.
+#[test]
+fn render_with_local_path_theme() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    let theme_path = typ_fixture("local-theme.typ");
+    assert!(
+        theme_path.exists(),
+        "fixture `tests/fixtures/local-theme.typ` must exist"
+    );
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg(&theme_path)
+        .arg("--format")
+        .arg("pdf")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    assert_eq!(
+        read_prefix(&out, 5),
+        b"%PDF-",
+        "output must start with the PDF magic bytes",
+    );
+    // Render the same fixture to text so we can assert the resume
+    // name round-tripped through Typst. PDF bytes aren't reliably
+    // searchable after font-subsetting, so use text as the channel.
+    let text_out = tmp.path().join("out.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg(&theme_path)
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&text_out)
+        .assert()
+        .success();
+    let body = std::fs::read_to_string(&text_out).expect("text output must be UTF-8");
+    assert!(
+        body.contains("Ada Lovelace"),
+        "local-theme text output must contain the rendered name; got: {body:?}"
+    );
+}
+
+/// A relative `./local-theme.typ` resolves against the binary's
+/// `current_dir`. Copies the fixture into a tempdir so the relative
+/// path has something to land on without polluting the repo.
+#[test]
+fn render_with_local_path_relative_theme() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    let src = typ_fixture("local-theme.typ");
+    let copied = tmp.path().join("my-theme.typ");
+    std::fs::copy(&src, &copied).expect("copy fixture into tempdir");
+
+    ferrocv()
+        .current_dir(tmp.path())
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg("./my-theme.typ")
+        .arg("--format")
+        .arg("pdf")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    assert_eq!(read_prefix(&out, 5), b"%PDF-");
+}
+
+/// Missing local-path file exits 2 with the offending path called out
+/// on stderr; no output file is written.
+#[test]
+fn render_with_missing_local_path_exits_two() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    let missing = tmp.path().join("does-not-exist.typ");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg(&missing)
+        .arg("--format")
+        .arg("pdf")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("does-not-exist.typ"));
+
+    assert!(
+        !out.exists(),
+        "no output file should be written on missing local-path"
+    );
+}
+
+/// A directory passed as `--theme` fails fast with a clear error
+/// pointing at the follow-up issue. No output file written.
+#[test]
+fn render_with_directory_local_path_exits_two() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    let dir = tmp.path().join("theme-dir");
+    std::fs::create_dir(&dir).expect("create a directory to pass as --theme");
+    // Directory path classifies as a local-path because of the `/`
+    // separator (on POSIX) / `\` on Windows; passing a trailing-dot
+    // plus path separator is the canonical way to force classification
+    // even if the dir name itself has no `.typ` suffix. We point
+    // directly at the directory path and expect the error to mention
+    // `.typ`.
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg(&dir)
+        .arg("--format")
+        .arg("pdf")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(".typ"))
+        .stderr(predicate::str::contains("#41"));
+
+    assert!(
+        !out.exists(),
+        "no output file should be written on directory local-path"
+    );
+}
+
+/// Non-UTF-8 bytes in a `.typ` file fail with a clear UTF-8 error
+/// rather than a cryptic compile diagnostic.
+#[test]
+fn render_with_non_utf8_local_path_exits_two() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    // 0xFF is never valid UTF-8 on its own; 0xC3 0x28 is a classic
+    // invalid continuation-byte pair. Together they guarantee the
+    // bytes fail UTF-8 validation on every platform.
+    let bad = tmp.path().join("bad-bytes.typ");
+    std::fs::write(&bad, [0xFF, 0xC3, 0x28, 0xFF]).expect("write non-UTF-8 bytes");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg(&bad)
+        .arg("--format")
+        .arg("pdf")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("UTF-8"));
+
+    assert!(
+        !out.exists(),
+        "no output file should be written on non-UTF-8 local-path"
+    );
+}
+
+/// `@preview/<name>:<version>` specs are recognized but deferred to
+/// stage C of issue #41. The error mentions the spec and points at
+/// the stage B `ferrocv theme install` follow-up.
+#[test]
+fn render_with_preview_spec_exits_two_stage_c_hint() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg("@preview/basic-resume:0.2.8")
+        .arg("--format")
+        .arg("pdf")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("@preview/basic-resume:0.2.8"))
+        .stderr(predicate::str::contains("stage C").or(predicate::str::contains("theme install")));
+
+    assert!(
+        !out.exists(),
+        "no output file should be written on deferred preview spec"
     );
 }

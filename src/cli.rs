@@ -22,7 +22,8 @@ use clap::{Parser, Subcommand};
 use serde_json::Value;
 
 use crate::{
-    THEMES, ValidationError, compile_html, compile_text, compile_theme, find_theme, validate_value,
+    THEMES, ThemeResolveError, ValidationError, compile_html_resolved, compile_text_resolved,
+    compile_theme_resolved, resolve_theme, validate_value,
 };
 
 /// Render JSON Resume documents via embedded Typst.
@@ -48,7 +49,16 @@ enum Commands {
     /// the named theme.
     ///
     /// `--theme` is optional for all formats. PDF and text default to
-    /// `text-minimal`; HTML defaults to `html-minimal`.
+    /// `text-minimal`; HTML defaults to `html-minimal`. `--theme` also
+    /// accepts a path to a local `.typ` file — either relative
+    /// (`./resume.typ`), absolute (`/abs/path/resume.typ`), or any
+    /// string ending in `.typ` or containing a path separator — in
+    /// which case the file's bytes are loaded at invocation time and
+    /// run under the same Typst sandbox bundled themes do. Single
+    /// `.typ` files only for now; directory-based local themes land
+    /// in a follow-up on issue #41. To force a bare name with no
+    /// path-like signals to resolve as a local file, prefix it with
+    /// `./` or give it a `.typ` extension.
     ///
     /// HTML output uses Typst's experimental HTML export; output shape
     /// may shift across ferrocv releases when Typst is bumped. The CLI
@@ -62,9 +72,12 @@ enum Commands {
     Render {
         /// Path to a JSON Resume document. Reads stdin if omitted.
         path: Option<PathBuf>,
-        /// Theme name. See the registered themes in `ferrocv::THEMES`.
-        /// Optional for all formats. PDF and text default to
-        /// `text-minimal`; HTML defaults to `html-minimal`.
+        /// Theme name or local `.typ` file path. Bundled names (see
+        /// `ferrocv themes list`) resolve out of the compile-time
+        /// registry; anything ending in `.typ` or containing a path
+        /// separator loads from the local filesystem. Optional for
+        /// all formats: PDF and text default to `text-minimal`; HTML
+        /// defaults to `html-minimal`.
         #[arg(long)]
         theme: Option<String>,
         /// Output format: `pdf`, `text`, or `html`. Defaults to `pdf`.
@@ -268,14 +281,27 @@ fn run_render(
         return Ok(ExitCode::from(1));
     }
 
-    // Step 5: resolve theme. Unknown names list the alternatives so
-    // users know what they could have typed.
-    let theme = match find_theme(theme_name) {
-        Some(t) => t,
-        None => {
-            eprintln!("error: unknown theme `{theme_name}`");
-            let names: Vec<&'static str> = THEMES.iter().map(|t| t.name).collect();
-            eprintln!("available themes: {}", names.join(", "));
+    // Step 5: resolve theme. Accepts three spec shapes — bundled
+    // name, local `.typ` path, or `@preview/...` spec — and returns a
+    // ResolvedTheme the compile pipeline can consume without caring
+    // which shape the user supplied. Errors carry enough context for
+    // a single-line stderr message; we match on variants only to
+    // preserve the pre-#41 "available themes: ..." hint on unknown
+    // bundled names.
+    let theme = match resolve_theme(theme_name) {
+        Ok(t) => t,
+        Err(err) => {
+            match &err {
+                ThemeResolveError::NotFound { available, .. } => {
+                    eprintln!("error: {err}");
+                    let mut names: Vec<&'static str> = available.clone();
+                    names.sort_unstable();
+                    eprintln!("available themes: {}", names.join(", "));
+                }
+                _ => {
+                    eprintln!("error: {err}");
+                }
+            }
             return Ok(ExitCode::from(2));
         }
     };
@@ -284,21 +310,21 @@ fn run_render(
     // return a String which we convert to UTF-8 bytes for the shared
     // write path below.
     let bytes: Vec<u8> = match format {
-        Format::Pdf => match compile_theme(theme, &value) {
+        Format::Pdf => match compile_theme_resolved(&theme, &value) {
             Ok(bytes) => bytes,
             Err(err) => {
                 eprintln!("{err}");
                 return Ok(ExitCode::from(2));
             }
         },
-        Format::Text => match compile_text(theme, &value) {
+        Format::Text => match compile_text_resolved(&theme, &value) {
             Ok(text) => text.into_bytes(),
             Err(err) => {
                 eprintln!("{err}");
                 return Ok(ExitCode::from(2));
             }
         },
-        Format::Html => match compile_html(theme, &value) {
+        Format::Html => match compile_html_resolved(&theme, &value) {
             Ok(html) => html.into_bytes(),
             Err(err) => {
                 eprintln!("{err}");

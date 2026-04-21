@@ -109,7 +109,7 @@ use typst::{Feature, Library, LibraryExt, World};
 use typst_html::HtmlDocument;
 use typst_pdf::PdfOptions;
 
-use crate::theme::Theme;
+use crate::theme::{OwnedTheme, ResolvedTheme, Theme};
 
 /// Virtual path of the single-file source that [`compile_pdf`] serves.
 const MAIN_PATH: &str = "/main.typ";
@@ -309,6 +309,41 @@ pub fn compile_text(theme: &Theme, data: &Value) -> Result<String, RenderError> 
 /// for some theme sources) surface as plain compile errors here.
 pub fn compile_html(theme: &Theme, data: &Value) -> Result<String, RenderError> {
     let world = FerrocvWorld::from_theme(theme, data);
+    render_world_to_html(&world)
+}
+
+/// Compile a [`ResolvedTheme`] to PDF bytes against a JSON Resume
+/// value.
+///
+/// Thin dispatch shim over [`compile_theme`] — accepts either the
+/// bundled `&'static Theme` variant or an [`OwnedTheme`] loaded off the
+/// filesystem, returning identical output for equivalent sources.
+/// Exists so CLI and other higher-level callers do not have to
+/// match on [`ResolvedTheme`] variants themselves.
+///
+/// See [`compile_theme`] for the full contract.
+pub fn compile_theme_resolved(theme: &ResolvedTheme, data: &Value) -> Result<Vec<u8>, RenderError> {
+    let world = FerrocvWorld::from_bundle(theme, data);
+    render_world(&world)
+}
+
+/// Compile a [`ResolvedTheme`] to a UTF-8 plain-text rendering against
+/// a JSON Resume value.
+///
+/// Companion to [`compile_theme_resolved`]. See [`compile_text`] for
+/// the frame-walk extractor rationale.
+pub fn compile_text_resolved(theme: &ResolvedTheme, data: &Value) -> Result<String, RenderError> {
+    let world = FerrocvWorld::from_bundle(theme, data);
+    render_world_to_text(&world)
+}
+
+/// Compile a [`ResolvedTheme`] to a single-file HTML document against
+/// a JSON Resume value.
+///
+/// Companion to [`compile_theme_resolved`]. See [`compile_html`] for
+/// the experimental-upstream caveat.
+pub fn compile_html_resolved(theme: &ResolvedTheme, data: &Value) -> Result<String, RenderError> {
+    let world = FerrocvWorld::from_bundle(theme, data);
     render_world_to_html(&world)
 }
 
@@ -591,6 +626,55 @@ impl AsSourceDiagnostic for typst::diag::SourceDiagnostic {
     }
 }
 
+/// Crate-internal trait unifying the two ownership shapes a theme
+/// bundle can take: a `&'static` [`Theme`] pulled out of the registry,
+/// or an owned [`OwnedTheme`] assembled at runtime (e.g. from a
+/// user-supplied local `.typ` file).
+///
+/// Introduced so [`FerrocvWorld::from_bundle`] stays monomorphic
+/// without the caller materializing a temporary `Theme`. Kept
+/// `pub(crate)` — the public surface is the new `compile_*_resolved`
+/// family of functions, not the trait itself.
+pub(crate) trait ThemeBundle {
+    /// Virtual path of the file Typst starts compilation from. MUST
+    /// appear as a key in [`Self::files`].
+    fn entrypoint(&self) -> &str;
+
+    /// Iterate over `(virtual_path, bytes)` pairs for every file in
+    /// the bundle.
+    fn files(&self) -> Box<dyn Iterator<Item = (&str, &[u8])> + '_>;
+}
+
+impl ThemeBundle for Theme {
+    fn entrypoint(&self) -> &str {
+        self.entrypoint
+    }
+
+    fn files(&self) -> Box<dyn Iterator<Item = (&str, &[u8])> + '_> {
+        Box::new(self.files.iter().map(|(p, b)| (*p, *b as &[u8])))
+    }
+}
+
+impl ThemeBundle for OwnedTheme {
+    fn entrypoint(&self) -> &str {
+        &self.entrypoint
+    }
+
+    fn files(&self) -> Box<dyn Iterator<Item = (&str, &[u8])> + '_> {
+        Box::new(self.files.iter().map(|(p, b)| (p.as_str(), b.as_slice())))
+    }
+}
+
+impl ThemeBundle for ResolvedTheme {
+    fn entrypoint(&self) -> &str {
+        ResolvedTheme::entrypoint(self)
+    }
+
+    fn files(&self) -> Box<dyn Iterator<Item = (&str, &[u8])> + '_> {
+        ResolvedTheme::files(self)
+    }
+}
+
 /// The [`World`] implementation that backs [`compile_pdf`] and
 /// [`compile_theme`].
 ///
@@ -630,11 +714,22 @@ impl FerrocvWorld {
     /// additionally parsed into a [`Source`] (Typst needs a parsed
     /// `Source` for the main file — see [`World::main`]).
     fn from_theme(theme: &Theme, data: &Value) -> Self {
-        let entrypoint = FileId::new(None, VirtualPath::new(theme.entrypoint));
-        let mut theme_files: HashMap<FileId, Bytes> = HashMap::with_capacity(theme.files.len());
+        Self::from_bundle(theme, data)
+    }
+
+    /// Build a World from anything that implements [`ThemeBundle`].
+    ///
+    /// The unified path behind both [`Self::from_theme`] and the new
+    /// `compile_*_resolved` functions. Factors the per-file byte-copy
+    /// loop out of a world that only knew `&Theme` into one that can
+    /// also ingest [`ResolvedTheme`] / [`OwnedTheme`] without
+    /// allocating a temporary `Theme`.
+    fn from_bundle<B: ThemeBundle + ?Sized>(bundle: &B, data: &Value) -> Self {
+        let entrypoint = FileId::new(None, VirtualPath::new(bundle.entrypoint()));
+        let mut theme_files: HashMap<FileId, Bytes> = HashMap::new();
         let mut entrypoint_text: Option<String> = None;
 
-        for (path, bytes) in theme.files {
+        for (path, bytes) in bundle.files() {
             let id = FileId::new(None, VirtualPath::new(path));
             // The entrypoint gets parsed into a Source below. We also
             // keep its bytes in the map so a `file()` lookup works
@@ -642,8 +737,10 @@ impl FerrocvWorld {
             // for, e.g., span reporting; costs nothing to populate).
             if id == entrypoint {
                 // UTF-8 is a hard requirement for any `.typ` file
-                // Typst can parse. An invalid-UTF-8 theme source is
-                // a packaging bug; panic is the right response.
+                // Typst can parse. For bundled themes an invalid-UTF-8
+                // entrypoint is a packaging bug (caught by a build-
+                // time test); for local-path themes `resolve_theme`
+                // already validated UTF-8 before we reached this path.
                 let text = std::str::from_utf8(bytes)
                     .expect("theme entrypoint must be valid UTF-8 Typst source")
                     .to_owned();
@@ -652,7 +749,7 @@ impl FerrocvWorld {
             theme_files.insert(id, Bytes::new(bytes.to_vec()));
         }
 
-        let text = entrypoint_text.expect("Theme.entrypoint must appear as a key in Theme.files");
+        let text = entrypoint_text.expect("bundle entrypoint must appear as a key in bundle files");
         let entrypoint_source = Source::new(entrypoint, text);
 
         Self::assemble(entrypoint, entrypoint_source, theme_files, data)
