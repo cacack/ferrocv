@@ -81,14 +81,32 @@ history. Users must be able to run this tool and know exactly where
 their data goes. The following are hard commitments; weakening any of
 them requires a constitutional amendment, not a feature PR.
 
-- **No network calls at runtime, full stop.** `ferrocv render` and
-  `ferrocv validate` are fully offline. Themes ship vendored in-tree
-  (`assets/themes/`) and are baked into the binary; the JSON Resume
-  schema is vendored the same way. The embedded Typst `World`
-  actively rejects any `@preview/...` package import rather than
-  fetching it. If a future feature needs a network-touching operation
-  (e.g. a package manager for out-of-tree themes), that is a
-  constitutional amendment, not a feature PR.
+- **No network calls in `render` or `validate`, full stop.**
+  `ferrocv render` and `ferrocv validate` are fully offline. Themes
+  ship vendored in-tree (`assets/themes/`) and are baked into the
+  binary; the JSON Resume schema is vendored the same way. The
+  embedded Typst `World` actively rejects any `@preview/...` package
+  import rather than fetching it — this rejection is hard and is not
+  relaxed by any feature flag or subcommand. Rendering may read from
+  the local installer cache populated by a prior
+  `ferrocv theme install` (see next bullet); that is a local
+  filesystem read, not a network call, and does not weaken the
+  `render`-is-offline guarantee.
+- **`ferrocv theme install` is the single, enumerated network-permitted
+  entry point.** It is an explicit, user-initiated subcommand that
+  fetches only from the Typst Universe `@preview` registry over HTTPS
+  (`https://packages.typst.org/preview/<name>-<version>.tar.gz`); it
+  is never invoked transitively from `render` or `validate`; its
+  network-capable dependencies live behind a Cargo feature flag
+  (`install`) so the default build contains no network code at all.
+  Package integrity is established by TLS only: `ferrocv` does not
+  verify upstream checksums or signatures for v1 because the Typst
+  Universe registry does not publish them. Users who need stronger
+  integrity guarantees can vendor the theme manually under
+  `assets/themes/`. Any additional network-touching operation — a
+  different registry, a signature verifier reaching out to a key
+  server, a theme search index — requires a further constitutional
+  amendment, not a feature PR.
 - **No telemetry, ever.** No usage pings, no crash reports, no opt-in
   "help us improve" toggle, no analytics SDK. Not now, not later.
 - **Resume data never leaves the process.** We read `resume.json`, we
