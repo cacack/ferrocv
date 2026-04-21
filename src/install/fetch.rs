@@ -18,9 +18,17 @@ use std::time::Duration;
 
 use super::{InstallError, PackageSpec};
 
-/// Default registry URL prefix. Override via [`fetch_tarball_from`]
-/// in tests to point at a local fixture server.
+/// Default registry URL prefix. Override via the
+/// `FERROCV_REGISTRY_URL` env var in tests to point at a local
+/// fixture server.
 pub const DEFAULT_REGISTRY: &str = "https://packages.typst.org/preview";
+
+/// Name of the env var that overrides [`DEFAULT_REGISTRY`]. Exists
+/// solely so integration tests can point the fetcher at a local
+/// `TcpListener` instead of reaching out to the real Typst Universe.
+/// Never documented in user-facing help text: the flag is a
+/// test-only escape hatch, not a config knob.
+pub const REGISTRY_URL_ENV: &str = "FERROCV_REGISTRY_URL";
 
 /// Default wall-clock timeout for a full fetch.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
@@ -34,11 +42,25 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
 /// random bytes indefinitely.
 pub const MAX_TARBALL_BYTES: u64 = 16 * 1024 * 1024;
 
-/// Construct the canonical tarball URL for a spec against
-/// [`DEFAULT_REGISTRY`].
+/// Root URL the fetcher uses for this process invocation.
+///
+/// Honors `FERROCV_REGISTRY_URL` when set (test-only escape hatch)
+/// and falls back to [`DEFAULT_REGISTRY`] otherwise. Treated as a
+/// URL prefix that the spec's `<name>-<version>.tar.gz` appends to.
+fn registry_root() -> String {
+    match std::env::var(REGISTRY_URL_ENV) {
+        Ok(v) if !v.is_empty() => v,
+        _ => DEFAULT_REGISTRY.to_owned(),
+    }
+}
+
+/// Construct the canonical tarball URL for a spec against the
+/// configured registry root (see [`registry_root`]).
 pub fn tarball_url(spec: &PackageSpec) -> String {
+    let root = registry_root();
+    let root = root.trim_end_matches('/');
     format!(
-        "{DEFAULT_REGISTRY}/{name}-{version}.tar.gz",
+        "{root}/{name}-{version}.tar.gz",
         name = spec.name,
         version = spec.version,
     )
@@ -53,8 +75,14 @@ pub fn fetch_tarball(spec: &PackageSpec) -> Result<Vec<u8>, InstallError> {
 /// local fixture server; production code goes through
 /// [`fetch_tarball`].
 pub fn fetch_tarball_from(url: &str) -> Result<Vec<u8>, InstallError> {
+    // Turn off `http_status_as_error` so 4xx/5xx responses come back
+    // as successful `Response` values we can inspect; otherwise the
+    // status-specific `InstallError::HttpStatus` branch would never
+    // fire (ureq would translate 404s into a generic
+    // `ureq::Error::StatusCode`).
     let agent = ureq::Agent::config_builder()
         .timeout_global(Some(FETCH_TIMEOUT))
+        .http_status_as_error(false)
         .build()
         .new_agent();
     let mut response = agent.get(url).call().map_err(|e| InstallError::Http {
@@ -93,10 +121,20 @@ mod tests {
 
     #[test]
     fn url_matches_registry_convention() {
+        // Guard against leaky env state from other tests that set the
+        // registry override. We snapshot, clear, assert, then restore.
+        // SAFETY: this is a unit test; `cargo test` serializes tests
+        // inside the same file unless they explicitly parallelize,
+        // and nothing here spawns a thread.
+        let prior = std::env::var(REGISTRY_URL_ENV).ok();
+        unsafe { std::env::remove_var(REGISTRY_URL_ENV) };
         let spec = parse_spec("@preview/basic-resume:0.2.8").unwrap();
         assert_eq!(
             tarball_url(&spec),
             "https://packages.typst.org/preview/basic-resume-0.2.8.tar.gz"
         );
+        if let Some(v) = prior {
+            unsafe { std::env::set_var(REGISTRY_URL_ENV, v) };
+        }
     }
 }
