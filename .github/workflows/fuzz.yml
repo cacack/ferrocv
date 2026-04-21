@@ -1,0 +1,107 @@
+name: fuzz
+
+# Nightly coverage-guided fuzzing of the two untrusted-input boundaries:
+# JSON parse (serde_json) and schema validate (jsonschema). Runs both
+# cargo-fuzz targets on a 2-minute wall-clock budget, retains crash
+# corpora as a workflow artifact, and auto-files a GitHub issue on
+# failure so operators get paged without watching the schedule.
+#
+# Nightly Rust toolchain is fuzz-only; the main CI pipeline stays on
+# stable + MSRV. See .github/workflows/ci.yml for that story.
+
+on:
+  schedule:
+    - cron: "0 7 * * *"   # 07:00 UTC nightly (~midnight Pacific)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: cargo fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [parse, validate]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # stable
+        with:
+          toolchain: nightly
+
+      - uses: taiki-e/install-action@5939f3337e40968c39aa70f5ecb1417a92fb25a0 # v2.75.15
+        with:
+          tool: cargo-fuzz
+
+      # Seed corpus is materialized at CI time rather than committed
+      # under fuzz/corpus/ — tests/fixtures/ is the single source of
+      # truth. Copy all fixtures (valid, invalid, malformed) into both
+      # corpora; the fuzzer is coverage-guided and sorts out which
+      # inputs reach which branches.
+      - name: Seed corpus from tests/fixtures
+        run: |
+          mkdir -p fuzz/corpus/parse fuzz/corpus/validate
+          cp tests/fixtures/*.json fuzz/corpus/parse/
+          cp tests/fixtures/*.json fuzz/corpus/validate/
+
+      - name: Fuzz ${{ matrix.target }}
+        working-directory: fuzz
+        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=120
+
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-crashes-${{ matrix.target }}-${{ github.run_id }}
+          path: fuzz/artifacts/${{ matrix.target }}/
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Assemble issue body
+        if: failure()
+        run: |
+          cat > /tmp/fuzz-issue-body.md <<'FUZZBODY'
+          # Nightly fuzz failure: `${{ matrix.target }}`
+
+          The nightly `cargo-fuzz` run crashed.
+
+          - **Target:** `${{ matrix.target }}`
+          - **Commit:** `${{ github.sha }}`
+          - **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          - **Crash corpus:** download the `fuzz-crashes-${{ matrix.target }}-${{ github.run_id }}` artifact from the run above.
+
+          ## Reproduce locally
+
+          ```bash
+          git fetch origin ${{ github.sha }}
+          git checkout ${{ github.sha }}
+          # Download the artifact and extract into fuzz/artifacts/${{ matrix.target }}/
+          cd fuzz
+          cargo +nightly fuzz run ${{ matrix.target }} fuzz/artifacts/${{ matrix.target }}/crash-<hash>
+          ```
+
+          Filed automatically by `.github/workflows/fuzz.yml`.
+          FUZZBODY
+
+      - name: File issue on failure
+        if: failure()
+        uses: peter-evans/create-issue-from-file@e8ef132d6df98ed982188e460ebb3b5d4ef3a9cd # v5.0.1
+        with:
+          title: "Nightly fuzz failure: ${{ matrix.target }} @ ${{ github.sha }}"
+          content-filepath: /tmp/fuzz-issue-body.md
+          labels: |
+            area:ci
+            fuzz-failure
