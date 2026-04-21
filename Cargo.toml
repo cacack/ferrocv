@@ -26,6 +26,18 @@ path = "src/lib.rs"
 name = "ferrocv"
 path = "src/main.rs"
 
+[features]
+# Default build is offline: `render` and `validate` compile without any
+# network-capable dependency in the graph (CONSTITUTION.md §6.1).
+default = []
+# Enables `ferrocv theme install`, the sole network-permitted entry
+# point per CONSTITUTION.md §6.1 (post-Stage-B amendment). Gates every
+# network-capable crate (`ureq`, `flate2`, `tar`, `toml`, `dirs`) AND
+# the Rust modules that use them (`src/install/`) so the default build
+# contains no network code. Verified in CI via
+# `cargo tree --no-default-features`.
+install = ["dep:ureq", "dep:flate2", "dep:tar", "dep:toml", "dep:dirs"]
+
 [dependencies]
 # CLI argument parsing. Derive API keeps the surface declarative.
 clap = { version = "4", features = ["derive"] }
@@ -51,6 +63,34 @@ typst-html = "0.14.2"
 # Bundling is what gives us cross-host reproducibility (CONSTITUTION
 # §6.4: same Typst sandbox everywhere) without scanning system fonts.
 typst-assets = { version = "0.14.2", features = ["fonts"] }
+
+# --- `install` feature: network-capable deps, gated behind the
+# `install` Cargo feature so they never enter the default build. Every
+# one is `optional = true` so `cargo build` (no features) produces a
+# binary with no `ureq`/`flate2`/`tar`/`toml`/`dirs` in its dependency
+# graph. CONSTITUTION.md §6.1 (post-Stage-B amendment) requires this
+# architectural boundary. Same precedent as the
+# `jsonschema = { default-features = false }` line above, which drops
+# `reqwest` for the same reason.
+#
+# `ureq = "3"` default features give us rustls + ring + gzip; NOT
+# `native-tls`, NOT `openssl`, NOT `tokio`. Upstream `typst-kit` makes
+# the same choice for the same reason. Pin to major-only so patch
+# bumps across the 3.x series (which have flirted with aws-lc vs ring
+# as default crypto provider) show up in `cargo audit` / `cargo deny`
+# review rather than silently shifting our TLS story.
+ureq = { version = "3", optional = true }
+# Gzip decoder used by the tarball extractor.
+flate2 = { version = "1", optional = true }
+# Tar archive reader. `unpack()` writes entries to disk; we pair it
+# with `flate2::read::GzDecoder` to handle the registry's `.tar.gz`.
+tar = { version = "0.4", optional = true }
+# TOML parser for `typst.toml` package manifests.
+toml = { version = "0.8", optional = true }
+# Platform-specific user cache directory (XDG on Linux, Caches on
+# macOS, LocalAppData on Windows). Overridable via `FERROCV_CACHE_DIR`
+# for tests and power users.
+dirs = { version = "6", optional = true }
 
 [dev-dependencies]
 serde_json = "1"
