@@ -1,7 +1,8 @@
 .PHONY: help \
         preflight fmt-check fmt clippy test deny audit typos \
         build build-release check clean doc install \
-        install-tools
+        install-tools \
+        fuzz fuzz-parse fuzz-validate
 
 # CI-parity targets: keep command strings in sync with
 # .github/workflows/ci.yml so local runs match CI byte-for-byte.
@@ -34,6 +35,16 @@ audit: ## cargo-audit (CI parity)
 
 typos: ## typos check (CI parity)
 	typos
+
+# --- Fuzzing (nightly-only; not part of preflight) ---------------------------
+
+fuzz-parse: ## Run cargo-fuzz parse target for 60s (nightly required)
+	cd fuzz && cargo +nightly fuzz run parse -- -max_total_time=60
+
+fuzz-validate: ## Run cargo-fuzz validate target for 60s (nightly required)
+	cd fuzz && cargo +nightly fuzz run validate -- -max_total_time=60
+
+fuzz: fuzz-parse fuzz-validate ## Run both cargo-fuzz targets for 60s each (nightly required)
 
 # --- Build & dev -------------------------------------------------------------
 

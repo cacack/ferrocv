@@ -24,6 +24,10 @@ strings there are kept in lockstep with `.github/workflows/ci.yml`.
 - `make test` / `make clippy` / `make fmt` — individual targets.
 - `make install-tools` — first-time install of the non-stock tools
   (`cargo-deny`, `cargo-audit`, `typos-cli`).
+- `make fuzz` / `make fuzz-parse` / `make fuzz-validate` —
+  local cargo-fuzz smoke (60s per target, nightly Rust required).
+  Nightly CI runs these for 120s each; see
+  `.github/workflows/fuzz.yml`.
 - A single test: `cargo test --test <file> <name>` (integration tests
   live under `tests/`, e.g. `cargo test --test render_cli`).
 
