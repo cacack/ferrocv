@@ -36,7 +36,7 @@ default = []
 # the Rust modules that use them (`src/install/`) so the default build
 # contains no network code. Verified in CI via
 # `cargo tree --no-default-features`.
-install = ["dep:ureq", "dep:flate2", "dep:tar", "dep:toml", "dep:dirs"]
+install = ["dep:ureq", "dep:flate2", "dep:tar", "dep:toml", "dep:dirs", "dep:tempfile"]
 
 [dependencies]
 # CLI argument parsing. Derive API keeps the surface declarative.
@@ -91,6 +91,11 @@ toml = { version = "0.8", optional = true }
 # macOS, LocalAppData on Windows). Overridable via `FERROCV_CACHE_DIR`
 # for tests and power users.
 dirs = { version = "6", optional = true }
+# Atomic "extract to sibling temp dir then rename" safety for
+# concurrent `theme install` invocations. Already present as a
+# dev-dep below, but the install pipeline uses it at runtime too; the
+# duplicate entry is what Cargo's `optional = true` requires.
+tempfile = { version = "3", optional = true }
 
 [dev-dependencies]
 serde_json = "1"

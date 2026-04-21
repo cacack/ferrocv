@@ -2,6 +2,8 @@
 //! via embedded Typst. See `CONSTITUTION.md` for design principles.
 
 pub mod cli;
+#[cfg(feature = "install")]
+pub mod install;
 pub mod render;
 pub mod theme;
 pub mod validate;
