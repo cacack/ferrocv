@@ -1,0 +1,49 @@
+# Standalone fuzz subcrate for ferrocv.
+#
+# This package is deliberately kept OUT of the main workspace via its
+# own empty `[workspace]` stanza below. The main `Cargo.toml` has no
+# `[workspace]`, so without this isolation Cargo would auto-detect
+# `fuzz/` as a member and `cargo fmt --all` / `cargo test --workspace`
+# / clippy would start pulling the `libfuzzer-sys` (nightly-only)
+# dependency tree into the stable toolchain build — breaking
+# `make preflight`.
+#
+# Fuzzing infrastructure is CI-time only. It does not enter the
+# shipped binary, and `fuzz/` is intentionally absent from the main
+# crate's `include = [...]` list so it never lands in the crates.io
+# tarball. Per CONSTITUTION §6.1, the runtime surface remains offline
+# and free of any fuzzer machinery.
+
+[package]
+name = "ferrocv-fuzz"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Empty workspace stanza: makes this package its own workspace root so
+# Cargo does not absorb it into the parent directory's implicit
+# workspace. See header comment above.
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+ferrocv = { path = ".." }
+
+[[bin]]
+name = "parse"
+path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "validate"
+path = "fuzz_targets/validate.rs"
+test = false
+doc = false
+bench = false
