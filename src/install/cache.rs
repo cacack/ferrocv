@@ -68,10 +68,7 @@ pub fn ensure_parent_exists(final_path: &Path) -> Result<PathBuf, InstallError> 
     let parent = final_path
         .parent()
         .ok_or_else(|| InstallError::Io {
-            context: format!(
-                "cache path has no parent: {}",
-                final_path.display(),
-            ),
+            context: format!("cache path has no parent: {}", final_path.display(),),
             source: std::io::Error::other("cache path has no parent"),
         })?
         .to_path_buf();

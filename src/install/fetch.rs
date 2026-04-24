@@ -101,10 +101,12 @@ pub fn fetch_tarball_from(url: &str) -> Result<Vec<u8>, InstallError> {
         .as_reader()
         .take(MAX_TARBALL_BYTES.saturating_add(1));
     let mut buf = Vec::new();
-    reader.read_to_end(&mut buf).map_err(|source| InstallError::Io {
-        context: format!("read tarball body from {url}"),
-        source,
-    })?;
+    reader
+        .read_to_end(&mut buf)
+        .map_err(|source| InstallError::Io {
+            context: format!("read tarball body from {url}"),
+            source,
+        })?;
     if (buf.len() as u64) > MAX_TARBALL_BYTES {
         return Err(InstallError::Io {
             context: format!("tarball body exceeded {MAX_TARBALL_BYTES} bytes"),

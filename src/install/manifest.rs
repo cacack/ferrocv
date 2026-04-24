@@ -32,15 +32,18 @@ pub struct Manifest {
 
 /// Parse a `typst.toml` string into a [`Manifest`].
 pub fn parse_manifest(toml_str: &str) -> Result<Manifest, InstallError> {
-    let value: toml::Value = toml_str.parse().map_err(|e: toml::de::Error| {
-        InstallError::ManifestParse {
-            reason: e.to_string(),
-        }
-    })?;
+    let value: toml::Value =
+        toml_str
+            .parse()
+            .map_err(|e: toml::de::Error| InstallError::ManifestParse {
+                reason: e.to_string(),
+            })?;
 
-    let package = value.get("package").ok_or_else(|| InstallError::ManifestParse {
-        reason: "missing [package] table".to_owned(),
-    })?;
+    let package = value
+        .get("package")
+        .ok_or_else(|| InstallError::ManifestParse {
+            reason: "missing [package] table".to_owned(),
+        })?;
 
     let name = read_required_string(package, "name")?;
     let version = read_required_string(package, "version")?;
@@ -56,12 +59,10 @@ pub fn parse_manifest(toml_str: &str) -> Result<Manifest, InstallError> {
             reason: format!("package.entrypoint must be a relative path: {entrypoint}"),
         });
     }
-    for component in entrypoint.split(|c| c == '/' || c == '\\') {
+    for component in entrypoint.split(['/', '\\']) {
         if component == ".." {
             return Err(InstallError::ManifestParse {
-                reason: format!(
-                    "package.entrypoint may not contain `..` segments: {entrypoint}"
-                ),
+                reason: format!("package.entrypoint may not contain `..` segments: {entrypoint}"),
             });
         }
     }

@@ -93,11 +93,7 @@ pub fn parse_spec(raw: &str) -> Result<PackageSpec, InstallError> {
 /// is intentionally stricter than the registry itself; we'd rather
 /// reject a weird-but-legal name than chance shell-injection or
 /// path-traversal in the cache path.
-fn validate_component(
-    what: &'static str,
-    value: &str,
-    raw: &str,
-) -> Result<(), InstallError> {
+fn validate_component(what: &'static str, value: &str, raw: &str) -> Result<(), InstallError> {
     if value == "." || value == ".." {
         return Err(InstallError::InvalidSpec {
             raw: raw.to_owned(),

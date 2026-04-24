@@ -49,10 +49,12 @@ pub fn extract_tarball(bytes: &[u8], dest: &Path) -> Result<(), InstallError> {
     // Second pass: actually extract.
     let gz = GzDecoder::new(Cursor::new(bytes));
     let mut archive = Archive::new(gz);
-    archive.unpack(dest).map_err(|source| InstallError::Extract {
-        context: format!("unpack tarball into {}", dest.display()),
-        source,
-    })?;
+    archive
+        .unpack(dest)
+        .map_err(|source| InstallError::Extract {
+            context: format!("unpack tarball into {}", dest.display()),
+            source,
+        })?;
     Ok(())
 }
 
@@ -64,19 +66,13 @@ fn reject_unsafe_path(path: &Path) -> Result<(), InstallError> {
             Component::Normal(_) | Component::CurDir => {}
             Component::ParentDir => {
                 return Err(InstallError::Extract {
-                    context: format!(
-                        "tar entry uses `..` path traversal: {}",
-                        path.display(),
-                    ),
+                    context: format!("tar entry uses `..` path traversal: {}", path.display(),),
                     source: std::io::Error::other("unsafe tar entry path"),
                 });
             }
             Component::RootDir | Component::Prefix(_) => {
                 return Err(InstallError::Extract {
-                    context: format!(
-                        "tar entry uses absolute path: {}",
-                        path.display(),
-                    ),
+                    context: format!("tar entry uses absolute path: {}", path.display(),),
                     source: std::io::Error::other("absolute tar entry path"),
                 });
             }

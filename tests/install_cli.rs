@@ -26,8 +26,8 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use assert_cmd::Command;
-use flate2::write::GzEncoder;
 use flate2::Compression;
+use flate2::write::GzEncoder;
 use predicates::prelude::*;
 use tar::{Builder, Header};
 
@@ -73,11 +73,7 @@ fn build_tarball(entries: &[(&str, &[u8])]) -> Vec<u8> {
 /// The server lives on a dedicated thread, handles exactly one
 /// connection, and exits. Good enough for per-test isolation; each
 /// test spawns its own server on an ephemeral port.
-fn spawn_fixture_server_with_status(
-    body: Vec<u8>,
-    status: u16,
-    reason: &str,
-) -> String {
+fn spawn_fixture_server_with_status(body: Vec<u8>, status: u16, reason: &str) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port");
     let addr = listener.local_addr().expect("addr").to_string();
     let reason = reason.to_owned();
@@ -197,12 +193,8 @@ fn install_rejects_missing_version() {
 #[test]
 fn install_happy_path_writes_cache_and_prints_path() {
     let tarball = fixture_tarball("basic-resume", "0.2.8");
-    let (cache_dir, assert) = install_from_fixture(
-        "@preview/basic-resume:0.2.8",
-        tarball,
-        200,
-        "OK",
-    );
+    let (cache_dir, assert) =
+        install_from_fixture("@preview/basic-resume:0.2.8", tarball, 200, "OK");
     let expected_path = cache_dir
         .join("packages")
         .join("preview")
@@ -229,12 +221,8 @@ fn install_happy_path_writes_cache_and_prints_path() {
 #[test]
 fn install_is_idempotent_on_second_run() {
     let tarball = fixture_tarball("basic-resume", "0.2.9");
-    let (cache_dir, assert) = install_from_fixture(
-        "@preview/basic-resume:0.2.9",
-        tarball,
-        200,
-        "OK",
-    );
+    let (cache_dir, assert) =
+        install_from_fixture("@preview/basic-resume:0.2.9", tarball, 200, "OK");
     assert.success();
 
     // Second run: no fixture server — a stray network call would
@@ -259,12 +247,8 @@ fn install_is_idempotent_on_second_run() {
 fn install_rejects_manifest_mismatch() {
     // Tarball declares a different name than the spec asks for.
     let tarball = fixture_tarball("different-name", "0.2.8");
-    let (cache_dir, assert) = install_from_fixture(
-        "@preview/basic-resume:0.2.8",
-        tarball,
-        200,
-        "OK",
-    );
+    let (cache_dir, assert) =
+        install_from_fixture("@preview/basic-resume:0.2.8", tarball, 200, "OK");
     assert
         .failure()
         .code(2)
@@ -315,7 +299,9 @@ fn install_fetches_live_package() {
         .arg("@preview/basic-resume:0.2.8")
         .assert()
         .success()
-        .stderr(predicate::str::contains("installed").or(predicate::str::contains("already cached")));
+        .stderr(
+            predicate::str::contains("installed").or(predicate::str::contains("already cached")),
+        );
     assert!(
         cache_dir
             .path()

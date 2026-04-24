@@ -17,13 +17,12 @@ preflight: fmt-check clippy test deny audit typos verify-no-network-default ## R
 
 # --- Architectural-boundary enforcement ---------------------------------------
 #
-# CONSTITUTION.md §6.1 (post-Stage-B amendment) requires that the
-# default build contains no network-capable code. The `install`
-# Cargo feature gates `ureq`, `tar`, and `dirs`; `flate2` and `toml`
-# were already transitive via typst before Stage B. This target
-# fails if `ureq`, `tar`, or `dirs` ever leak into the default
-# dependency graph — a signal that someone accidentally moved a
-# network-capable dep out from behind the `install` feature.
+# CONSTITUTION.md section 6.1 (post-Stage-B amendment) requires
+# that the default build contains no network-capable code. The
+# `install` Cargo feature gates `ureq`, `tar`, and `dirs`; the
+# gzip decoder and TOML parser crates were already transitive via
+# typst before Stage B. This target fails if `ureq`, `tar`, or
+# `dirs` ever leak into the default dependency graph.
 
 verify-no-network-default: ## Fail if ureq/tar/dirs leak into the default build
 	@leaked=$$(cargo tree --no-default-features 2>/dev/null | grep -E '^(ureq|tar v|dirs v) ' || true); \
