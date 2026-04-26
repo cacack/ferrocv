@@ -12,6 +12,8 @@
 //! types to avoid pulling `serde-derive` into the `install` feature
 //! just for three string fields.
 
+use std::path::{Component, Path};
+
 use super::InstallError;
 
 /// Minimal view of `typst.toml` that `ferrocv` cares about.
@@ -54,16 +56,43 @@ pub fn parse_manifest(toml_str: &str) -> Result<Manifest, InstallError> {
             reason: "package.entrypoint is empty".to_owned(),
         });
     }
-    if entrypoint.starts_with('/') || entrypoint.starts_with('\\') {
+    // Reject Windows drive-letter and UNC prefixes explicitly: the
+    // manifest parses on whatever host runs `themes install`, but
+    // the cache may be read on a different host. `Path::components()`
+    // is platform-dependent — on Unix it would happily accept
+    // `C:\evil.typ` as a single Normal component, only for a later
+    // `Path::join(cache_root, "C:\\evil.typ")` on Windows to discard
+    // the cache root. The string check runs before the `Path` walk
+    // so the rejection is host-independent.
+    let bytes = entrypoint.as_bytes();
+    if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
         return Err(InstallError::ManifestParse {
             reason: format!("package.entrypoint must be a relative path: {entrypoint}"),
         });
     }
-    for component in entrypoint.split(['/', '\\']) {
-        if component == ".." {
-            return Err(InstallError::ManifestParse {
-                reason: format!("package.entrypoint may not contain `..` segments: {entrypoint}"),
-            });
+    if entrypoint.starts_with("\\\\") || entrypoint.starts_with("//") {
+        return Err(InstallError::ManifestParse {
+            reason: format!("package.entrypoint must be a relative path: {entrypoint}"),
+        });
+    }
+    // Walk the path's components to catch Unix-absolute paths and
+    // `..` segments. The drive-letter / UNC checks above already
+    // covered the host-independent prefixes; this catches the rest.
+    for component in Path::new(&entrypoint).components() {
+        match component {
+            Component::Normal(_) | Component::CurDir => {}
+            Component::ParentDir => {
+                return Err(InstallError::ManifestParse {
+                    reason: format!(
+                        "package.entrypoint may not contain `..` segments: {entrypoint}"
+                    ),
+                });
+            }
+            Component::RootDir | Component::Prefix(_) => {
+                return Err(InstallError::ManifestParse {
+                    reason: format!("package.entrypoint must be a relative path: {entrypoint}"),
+                });
+            }
         }
     }
 
@@ -163,6 +192,32 @@ entrypoint = "../other/lib.typ"
 "#;
         let err = parse_manifest(src).expect_err("path-traversal entrypoint must fail");
         assert!(matches!(err, InstallError::ManifestParse { .. }));
+    }
+
+    #[test]
+    fn rejects_windows_drive_letter_entrypoint() {
+        // Drive-letter prefixes (`C:lib.typ`, `C:\lib.typ`) on Windows
+        // are absolute or drive-relative; `Path::join(cache_root, ...)`
+        // would discard the cache root and read from outside it. The
+        // component-walk validator must reject these on every host so
+        // a malicious manifest can't slip past Linux/macOS CI.
+        for src in [
+            r#"
+[package]
+name = "x"
+version = "1"
+entrypoint = "C:\\evil.typ"
+"#,
+            r#"
+[package]
+name = "x"
+version = "1"
+entrypoint = "C:lib.typ"
+"#,
+        ] {
+            let err = parse_manifest(src).expect_err("drive-letter entrypoint must fail");
+            assert!(matches!(err, InstallError::ManifestParse { .. }));
+        }
     }
 
     #[test]

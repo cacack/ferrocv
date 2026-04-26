@@ -23,9 +23,13 @@ preflight: fmt-check clippy test deny audit typos verify-no-network-default ## R
 # gzip decoder and TOML parser crates were already transitive via
 # typst before Stage B. This target fails if `ureq`, `tar`, or
 # `dirs` ever leak into the default dependency graph.
+#
+# `--prefix none` flattens the tree so transitive deps (which
+# would otherwise be prefixed with tree-drawing characters) are
+# matched by the regex anchored at column 0.
 
 verify-no-network-default: ## Fail if ureq/tar/dirs leak into the default build
-	@leaked=$$(cargo tree --no-default-features 2>/dev/null | grep -E '^(ureq|tar v|dirs v) ' || true); \
+	@leaked=$$(cargo tree --no-default-features --prefix none 2>/dev/null | grep -E '^(ureq|tar v|dirs v) ' || true); \
 	if [ -n "$$leaked" ]; then \
 		echo "error: network-capable dep leaked into default build:"; \
 		echo "$$leaked"; \

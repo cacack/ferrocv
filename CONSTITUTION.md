@@ -89,10 +89,10 @@ them requires a constitutional amendment, not a feature PR.
   import rather than fetching it — this rejection is hard and is not
   relaxed by any feature flag or subcommand. Rendering may read from
   the local installer cache populated by a prior
-  `ferrocv theme install` (see next bullet); that is a local
+  `ferrocv themes install` (see next bullet); that is a local
   filesystem read, not a network call, and does not weaken the
   `render`-is-offline guarantee.
-- **`ferrocv theme install` is the single, enumerated network-permitted
+- **`ferrocv themes install` is the single, enumerated network-permitted
   entry point.** It is an explicit, user-initiated subcommand that
   fetches only from the Typst Universe `@preview` registry over HTTPS
   (`https://packages.typst.org/preview/<name>-<version>.tar.gz`); it
