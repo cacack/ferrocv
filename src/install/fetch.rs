@@ -56,7 +56,20 @@ fn registry_root() -> String {
 
 /// Construct the canonical tarball URL for a spec against the
 /// configured registry root (see [`registry_root`]).
+///
+/// The default registry root bakes in the `preview` namespace, so this
+/// function only interpolates `name` and `version`. The
+/// `debug_assert_eq!` makes that coupling explicit: if a future change
+/// loosens [`crate::install::spec::parse_spec`] to accept other
+/// namespaces (e.g. `@local`), this assertion fires under
+/// `cargo test` rather than silently fetching the wrong URL. Release
+/// builds drop the assertion.
 pub fn tarball_url(spec: &PackageSpec) -> String {
+    debug_assert_eq!(
+        spec.namespace, "preview",
+        "tarball_url currently only supports the @preview namespace; \
+         widen DEFAULT_REGISTRY before relaxing parse_spec"
+    );
     let root = registry_root();
     let root = root.trim_end_matches('/');
     format!(

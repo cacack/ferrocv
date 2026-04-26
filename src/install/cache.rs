@@ -89,9 +89,36 @@ mod tests {
     // runner parallelizes.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    /// RAII guard that snapshots and restores an env var. Restoration
+    /// happens in `Drop`, so a panicking test body still leaves the
+    /// process env intact for the next test (the previous open-coded
+    /// version skipped the restore on panic and could leak state into
+    /// any other test that observed `FERROCV_CACHE_DIR`).
+    struct EnvVarGuard {
+        key: String,
+        prior: Option<String>,
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            // SAFETY: tests are serialized via ENV_LOCK held by the
+            // caller of `with_env_var`; no other thread mutates this
+            // env var while this guard is live.
+            unsafe {
+                match &self.prior {
+                    Some(v) => std::env::set_var(&self.key, v),
+                    None => std::env::remove_var(&self.key),
+                }
+            }
+        }
+    }
+
     fn with_env_var<F: FnOnce()>(key: &str, value: Option<&str>, body: F) {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let prior = std::env::var(key).ok();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _guard = EnvVarGuard {
+            key: key.to_owned(),
+            prior: std::env::var(key).ok(),
+        };
         // SAFETY: tests are serialized via ENV_LOCK above, and the CI
         // test runner does not spawn threads that read this env var
         // concurrently with this test suite.
@@ -102,12 +129,7 @@ mod tests {
             }
         }
         body();
-        unsafe {
-            match prior {
-                Some(v) => std::env::set_var(key, v),
-                None => std::env::remove_var(key),
-            }
-        }
+        // _guard's Drop restores the prior value here (or on panic).
     }
 
     #[test]

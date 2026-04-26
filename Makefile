@@ -26,10 +26,14 @@ preflight: fmt-check clippy test deny audit typos verify-no-network-default ## R
 #
 # `--prefix none` flattens the tree so transitive deps (which
 # would otherwise be prefixed with tree-drawing characters) are
-# matched by the regex anchored at column 0.
+# matched by the regex anchored at column 0. The pattern anchors
+# on `v[0-9]` because `cargo tree --prefix none` prints lines as
+# `<crate> v<version>` with no space between `v` and the digit
+# (e.g. `tar v0.4.45`); a literal trailing space in the regex
+# would only catch `ureq` and silently skip `tar`/`dirs`.
 
 verify-no-network-default: ## Fail if ureq/tar/dirs leak into the default build
-	@leaked=$$(cargo tree --no-default-features --prefix none 2>/dev/null | grep -E '^(ureq|tar v|dirs v) ' || true); \
+	@leaked=$$(cargo tree --no-default-features --prefix none 2>/dev/null | grep -E '^(ureq|tar|dirs) v[0-9]' || true); \
 	if [ -n "$$leaked" ]; then \
 		echo "error: network-capable dep leaked into default build:"; \
 		echo "$$leaked"; \

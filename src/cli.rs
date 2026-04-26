@@ -269,12 +269,21 @@ fn run_themes_install(spec: &str) -> Result<ExitCode> {
         }
         Err(err) => {
             eprintln!("error: {err}");
-            // Give the user a hint about inspectable state for errors
-            // that mention a filesystem location.
-            if let InstallError::Extract { .. } | InstallError::Io { .. } = &err
-                && let Ok(root) = install::cache::preview_cache_root()
-            {
-                eprintln!("cache root: {}", root.display());
+            // Give the user a hint about inspectable state. For
+            // filesystem-touching errors, point at the cache root so
+            // they can investigate. For `CacheDirUnresolved` (the one
+            // case the cache root *isn't* discoverable), surface the
+            // env-var override instead.
+            match &err {
+                InstallError::Extract { .. } | InstallError::Io { .. } => {
+                    if let Ok(root) = install::cache::preview_cache_root() {
+                        eprintln!("cache root: {}", root.display());
+                    }
+                }
+                InstallError::CacheDirUnresolved => {
+                    eprintln!("hint: set FERROCV_CACHE_DIR to override the cache location");
+                }
+                _ => {}
             }
             Ok(ExitCode::from(2))
         }
