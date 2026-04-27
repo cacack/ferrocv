@@ -4,6 +4,8 @@
 pub mod cli;
 #[cfg(feature = "install")]
 pub mod install;
+#[cfg(feature = "install")]
+pub mod package_cache;
 pub mod render;
 pub mod theme;
 pub mod validate;
