@@ -61,6 +61,12 @@
 //
 // `lower()` is a global function on `str` content in Typst, not a
 // method — `s.lower()` and `s.to-lowercase()` both error out.
+//
+// Username fallback: when a profile has `username` but no `url`,
+// build the canonical host path (`github.com/<u>`,
+// `linkedin.com/in/<u>`) so basic-resume's helper produces a real
+// link after its `https://` prepend. Returning the bare username
+// would yield `https://<username>` — a broken URL.
 #let __profile_url(network_name) = {
   let profiles = basics.at("profiles", default: ())
   let target = lower(network_name.replace(" ", ""))
@@ -70,8 +76,15 @@
   if matches.len() > 0 {
     let p = matches.at(0)
     let u = p.at("url", default: "")
-    if u != "" { __strip_scheme(u) }
-    else { p.at("username", default: "") }
+    if u != "" {
+      __strip_scheme(u)
+    } else {
+      let username = p.at("username", default: "")
+      if username == "" { "" }
+      else if target == "github" { "github.com/" + username }
+      else if target == "linkedin" { "linkedin.com/in/" + username }
+      else { "" }
+    }
   } else { "" }
 }
 
