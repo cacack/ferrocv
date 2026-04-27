@@ -34,6 +34,14 @@ allow = [
     # CC0-1.0 is a public-domain dedication; required by `roman-numerals-rs`
     # (transitive: typst-library -> hayagriva -> roman-numerals-rs).
     "CC0-1.0",
+    # CDLA-Permissive-2.0 is the license Mozilla publishes the
+    # `webpki-roots` root-certificate list under — the same list rustls
+    # consumes for TLS verification. Only reachable under `--features
+    # install` (webpki-roots is a transitive dep of ureq+rustls, which
+    # are gated on the `install` feature). SPDX-identified permissive
+    # license patterned after BSD; no viral clauses, no patent
+    # surprises.
+    "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
     # MIT-0 is MIT No Attribution; required by `borrow-or-share`

@@ -109,12 +109,51 @@ enum Commands {
 
 /// Subcommands of `ferrocv themes`.
 ///
-/// Nested-verb structure reserves space for a future
-/// `themes install <spec>` sibling (see issue #41).
+/// `themes install` is the single, enumerated network-permitted entry
+/// point per CONSTITUTION.md §6.1 (post-Stage-B amendment); it is
+/// gated behind the `install` Cargo feature so the default build
+/// contains no network-capable code at all. `themes list` is
+/// unconditional.
 #[derive(Debug, Subcommand)]
 enum ThemesCommands {
     /// List registered theme names, one per line, sorted.
     List,
+    /// Download a Typst Universe package into the local cache so
+    /// later `render` invocations can resolve `@preview/<name>:<version>`
+    /// offline.
+    ///
+    /// Spec format: `@preview/<name>:<version>` (e.g.
+    /// `@preview/basic-resume:0.2.8`). Only the `@preview/` namespace
+    /// is accepted in v1; other namespaces are rejected with a clear
+    /// error.
+    ///
+    /// Fetches `https://packages.typst.org/preview/<name>-<version>.tar.gz`
+    /// over HTTPS (TLS-only integrity; the registry does not publish
+    /// checksums or signatures), extracts into a sibling temp
+    /// directory, verifies the tarball's `typst.toml` matches the
+    /// spec, and atomically renames the staged directory onto its
+    /// final cache path.
+    ///
+    /// Cache location:
+    /// - Default: `{dirs::cache_dir()}/ferrocv/packages/preview/<name>/<version>/`
+    ///   (Linux: `$XDG_CACHE_HOME or $HOME/.cache/...`,
+    ///   macOS: `$HOME/Library/Caches/...`,
+    ///   Windows: `%LOCALAPPDATA%\...`).
+    /// - Override: set `FERROCV_CACHE_DIR=/some/path` to write to
+    ///   `/some/path/packages/preview/<name>/<version>/` instead.
+    ///
+    /// v1 has no cache eviction: delete the cache directory with
+    /// `rm -rf` to reclaim space.
+    ///
+    /// Exit codes:
+    /// - 0: installed successfully (or already cached — idempotent).
+    /// - 2: invalid spec, HTTP failure, extraction failure, or
+    ///   manifest mismatch.
+    #[cfg(feature = "install")]
+    Install {
+        /// `@preview/<name>:<version>` spec of the package to install.
+        spec: String,
+    },
 }
 
 /// Output formats supported by `ferrocv render`.
@@ -175,7 +214,79 @@ pub fn run() -> Result<ExitCode> {
         } => run_render(path.as_deref(), theme.as_deref(), format, output.as_deref()),
         Commands::Themes { command } => match command {
             ThemesCommands::List => run_themes_list(),
+            #[cfg(feature = "install")]
+            ThemesCommands::Install { spec } => run_themes_install(&spec),
         },
+    }
+}
+
+/// Run `ferrocv themes install <spec>`.
+///
+/// Gated behind the `install` Cargo feature — if the binary was built
+/// without `--features install`, the `Install` variant does not
+/// exist and clap rejects the subcommand with its own "unknown
+/// subcommand" error (exit 2).
+///
+/// Network boundary: this is the ONLY function in the entire CLI that
+/// is allowed to make a network call (CONSTITUTION.md §6.1
+/// post-Stage-B amendment). It lives in a `#[cfg(feature = "install")]`
+/// block so the compiler refuses to build it into the default binary.
+#[cfg(feature = "install")]
+fn run_themes_install(spec: &str) -> Result<ExitCode> {
+    use crate::install::{self, InstallError};
+
+    let parsed = match install::spec::parse_spec(spec) {
+        Ok(s) => s,
+        Err(err) => {
+            eprintln!("error: {err}");
+            return Ok(ExitCode::from(2));
+        }
+    };
+
+    match install::install(&parsed) {
+        Ok(install::pipeline::InstallOutcome::Installed { path }) => {
+            // One-line path on stdout for scripting; human-readable
+            // summary on stderr so `$(ferrocv themes install ...)`
+            // captures just the path.
+            println!("{}", path.display());
+            eprintln!(
+                "installed @preview/{}:{} into {}",
+                parsed.name,
+                parsed.version,
+                path.display(),
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        Ok(install::pipeline::InstallOutcome::AlreadyCached { path }) => {
+            println!("{}", path.display());
+            eprintln!(
+                "@preview/{}:{} already cached at {}",
+                parsed.name,
+                parsed.version,
+                path.display(),
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(err) => {
+            eprintln!("error: {err}");
+            // Give the user a hint about inspectable state. For
+            // filesystem-touching errors, point at the cache root so
+            // they can investigate. For `CacheDirUnresolved` (the one
+            // case the cache root *isn't* discoverable), surface the
+            // env-var override instead.
+            match &err {
+                InstallError::Extract { .. } | InstallError::Io { .. } => {
+                    if let Ok(root) = install::cache::preview_cache_root() {
+                        eprintln!("cache root: {}", root.display());
+                    }
+                }
+                InstallError::CacheDirUnresolved => {
+                    eprintln!("hint: set FERROCV_CACHE_DIR to override the cache location");
+                }
+                _ => {}
+            }
+            Ok(ExitCode::from(2))
+        }
     }
 }
 

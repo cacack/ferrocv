@@ -1,7 +1,7 @@
 .PHONY: help \
         preflight fmt-check fmt clippy test deny audit typos \
         build build-release check clean doc install \
-        install-tools \
+        install-tools verify-no-network-default \
         fuzz fuzz-parse fuzz-validate
 
 # CI-parity targets: keep command strings in sync with
@@ -13,7 +13,34 @@ help: ## Show available targets
 
 # --- CI parity ---------------------------------------------------------------
 
-preflight: fmt-check clippy test deny audit typos ## Run all CI checks locally
+preflight: fmt-check clippy test deny audit typos verify-no-network-default ## Run all CI checks locally
+
+# --- Architectural-boundary enforcement ---------------------------------------
+#
+# CONSTITUTION.md section 6.1 (post-Stage-B amendment) requires
+# that the default build contains no network-capable code. The
+# `install` Cargo feature gates `ureq`, `tar`, and `dirs`; the
+# gzip decoder and TOML parser crates were already transitive via
+# typst before Stage B. This target fails if `ureq`, `tar`, or
+# `dirs` ever leak into the default dependency graph.
+#
+# `--prefix none` flattens the tree so transitive deps (which
+# would otherwise be prefixed with tree-drawing characters) are
+# matched by the regex anchored at column 0. The pattern anchors
+# on `v[0-9]` because `cargo tree --prefix none` prints lines as
+# `<crate> v<version>` with no space between `v` and the digit
+# (e.g. `tar v0.4.45`); a literal trailing space in the regex
+# would only catch `ureq` and silently skip `tar`/`dirs`.
+
+verify-no-network-default: ## Fail if ureq/tar/dirs leak into the default build
+	@leaked=$$(cargo tree --no-default-features --prefix none 2>/dev/null | grep -E '^(ureq|tar|dirs) v[0-9]' || true); \
+	if [ -n "$$leaked" ]; then \
+		echo "error: network-capable dep leaked into default build:"; \
+		echo "$$leaked"; \
+		exit 1; \
+	else \
+		echo "ok: no network-capable deps in default build"; \
+	fi
 
 fmt-check: ## cargo fmt --check (CI parity)
 	cargo fmt --all -- --check
