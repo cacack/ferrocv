@@ -48,8 +48,8 @@ pattern from.
 
 ## Anatomy of an adapter
 
-The repo currently ships three adapters, deliberately picked to
-demonstrate three different vendoring shapes. Read whichever is closest
+The repo currently ships four adapters, deliberately picked to
+demonstrate four different vendoring shapes. Read whichever is closest
 to your case before authoring a new one.
 
 | Adapter                                           | Shape                  | Why it's the exemplar                                                                                  |
@@ -57,6 +57,7 @@ to your case before authoring a new one.
 | [`fantastic-cv`](../assets/themes/fantastic-cv/)             | Pure glue, light patch | Upstream needed only one compatibility patch (`link("")` guard); everything else is glue in `resume.typ`. |
 | [`typst-jsonresume-cv`](../assets/themes/typst-jsonresume-cv/) | Glue + optional-field shim | Upstream read a path the World doesn't serve, plus several dict lookups that crashed on sparse JSON Resume documents. |
 | [`modern-cv`](../assets/themes/modern-cv/)                   | Heavy patch            | Upstream pulled two `@preview/...` packages and read the system clock; required removing both and i18n-flattening to English. |
+| [`basic-resume`](../assets/themes/basic-resume/)             | Single `@preview` strip | Upstream pulled exactly one `@preview/...` package (`scienceicons` for the ORCID glyph); the icon call site rewrote to a plain text label. |
 
 Every adapter directory has the same shape:
 
