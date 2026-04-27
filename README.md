@@ -92,6 +92,32 @@ stdin if no path is given.
 sorted lexicographically, with no decoration — a stable
 machine-readable contract.
 
+### `--theme` resolution modes
+
+`--theme <spec>` accepts three shapes, evaluated in this order:
+
+1. **Bundled name** — e.g. `--theme typst-jsonresume-cv` or
+   `--theme html-minimal`. Looked up in the compile-time theme
+   registry; see `ferrocv themes list` for the current set.
+2. **Local `.typ` path** — e.g. `--theme ./resume.typ` or
+   `--theme /abs/path/to/theme.typ`. Any spec containing a `/` or `\`,
+   ending in `.typ`, or starting with `.` / `/` takes this branch.
+   Single-file only — directory-based local themes are tracked as a
+   follow-up. Force a bare-name spec onto this branch with `./name`
+   or a `.typ` extension.
+3. **Typst Universe package** — e.g.
+   `--theme @preview/basic-resume:0.2.8`. Resolves out of the local
+   installer cache populated by a prior `ferrocv themes install`
+   (gated behind the `install` Cargo feature). Render itself never
+   makes a network call: a cache miss exits 2 with a single-line
+   "Run: ferrocv themes install ..." hint pointing at the install
+   subcommand. Cache location is
+   `${dirs::cache_dir()}/ferrocv/packages/preview/<name>/<version>/`
+   by default and overridable via `FERROCV_CACHE_DIR`. Builds without
+   the `install` feature reject `@preview/...` specs with a clear
+   "rebuild with `--features install`" message — the cache reader is
+   gated behind the same flag as the installer itself.
+
 Exit codes (shared across subcommands):
 
 - `0` — success
