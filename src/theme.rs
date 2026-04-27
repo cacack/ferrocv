@@ -60,10 +60,21 @@
 //!   issue. No sibling imports, no package resolver — the file runs
 //!   under exactly the same Typst sandbox bundled themes do.
 //!
-//! `@preview/...` specs are recognized but deferred: in Stage A they
-//! return [`ThemeResolveError::PackageSpecDeferredToStageC`] so
-//! Stage B's installer and Stage C's cache reader land behind a clear
-//! contract.
+//! `@preview/<name>:<version>` specs route through the offline
+//! installer cache populated by `ferrocv themes install` (Stage B).
+//! Cache hits resolve to [`ResolvedTheme::Owned`] and feed straight
+//! into the same compile pipeline bundled themes use; cache misses
+//! return [`ThemeResolveError::PreviewCacheMiss`] so the CLI can
+//! point the user at `ferrocv themes install` rather than calling the
+//! network-capable installer transitively. Render and validate stay
+//! fully offline (CONSTITUTION §6.1, post-Stage-B amendment).
+//!
+//! When the binary is built without the `install` Cargo feature the
+//! Universe-resolution path errors out with
+//! [`ThemeResolveError::PreviewSpecRequiresInstallFeature`] — the
+//! cache reader and the manifest parser both live behind that feature
+//! flag, so a default build cannot resolve `@preview/...` specs even
+//! against a populated cache.
 
 /// A themed Typst source bundle that [`crate::render::compile_theme`]
 /// can compile against a JSON Resume document.
@@ -479,13 +490,55 @@ pub enum ThemeResolveError {
         /// The path the user typed, as given.
         path: std::path::PathBuf,
     },
-    /// The user supplied an `@preview/<name>:<version>` spec. Stage A
-    /// of issue #41 recognizes these but defers resolution to Stage C;
-    /// the CLI prints a message pointing at the follow-up installer
-    /// subcommand that Stage B will land.
-    PackageSpecDeferredToStageC {
+    /// The user supplied an `@preview/<name>:<version>` spec but the
+    /// package was not present in the local installer cache. The CLI
+    /// formats this into a single-line "run `ferrocv themes install
+    /// @preview/...`" hint pointing at Stage B's subcommand. Carries
+    /// the cache path that was inspected so the diagnostic is
+    /// reproducible.
+    PreviewCacheMiss {
         /// The raw spec the user typed.
         spec: String,
+        /// Filesystem path the resolver expected to find the package
+        /// at. Showing it lets the user verify e.g. that
+        /// `FERROCV_CACHE_DIR` is set to what they think it is.
+        expected_path: std::path::PathBuf,
+    },
+    /// The cached package directory exists but is malformed —
+    /// missing `typst.toml`, broken manifest, manifest declares a
+    /// different name/version than the cache layout, or the declared
+    /// entrypoint does not exist on disk. Hint: re-install with
+    /// `ferrocv themes install --refresh` (TODO when that flag
+    /// lands) or delete the cache directory and retry.
+    PreviewCacheCorrupt {
+        /// The raw spec the user typed.
+        spec: String,
+        /// Path to the file or directory that triggered the
+        /// corruption diagnostic.
+        path: std::path::PathBuf,
+        /// Human-readable explanation of what was malformed.
+        reason: String,
+    },
+    /// The user supplied an `@preview/<name>:<version>` spec on a
+    /// build that does not include the `install` Cargo feature, so
+    /// the cache reader is not compiled in. CLI maps this to "rebuild
+    /// with `--features install`, run `ferrocv themes install`, retry
+    /// the render".
+    PreviewSpecRequiresInstallFeature {
+        /// The raw spec the user typed.
+        spec: String,
+    },
+    /// The user supplied a string starting with `@preview/` that is
+    /// not a syntactically valid spec. The previous design folded this
+    /// into [`Self::PreviewCacheMiss`], but that produced a circular
+    /// hint ("Run: ferrocv themes install <bad spec>" — which would
+    /// hit the same parse failure). Splitting it lets the CLI print a
+    /// pointed "expected `@preview/<name>:<version>`" message instead.
+    PreviewSpecInvalid {
+        /// The raw spec the user typed.
+        spec: String,
+        /// Human-readable explanation from the spec parser.
+        reason: String,
     },
 }
 
@@ -515,11 +568,31 @@ impl std::fmt::Display for ThemeResolveError {
                 "local-path theme {} is not valid UTF-8 (Typst source files must be UTF-8)",
                 path.display()
             ),
-            ThemeResolveError::PackageSpecDeferredToStageC { spec } => write!(
+            ThemeResolveError::PreviewCacheMiss {
+                spec,
+                expected_path,
+            } => write!(
                 f,
-                "{spec} theme resolution arrives in stage C of issue #41; \
-                 for now install via the future `ferrocv theme install` command (stage B) \
-                 or vendor the theme manually under assets/themes/"
+                "theme '{spec}' not found in cache at {}. \
+                 Run: ferrocv themes install {spec}",
+                expected_path.display(),
+            ),
+            ThemeResolveError::PreviewCacheCorrupt { spec, path, reason } => write!(
+                f,
+                "cached theme {spec} is corrupt at {}: {reason}. \
+                 Remove the cache directory and re-run `ferrocv themes install {spec}`.",
+                path.display(),
+            ),
+            ThemeResolveError::PreviewSpecRequiresInstallFeature { spec } => write!(
+                f,
+                "theme '{spec}' requires a build with the `install` Cargo feature. \
+                 Rebuild with `cargo install ferrocv --features install`, \
+                 then run `ferrocv themes install {spec}` before this render."
+            ),
+            ThemeResolveError::PreviewSpecInvalid { spec, reason } => write!(
+                f,
+                "invalid Typst Universe spec '{spec}': {reason}. \
+                 Expected '@preview/<name>:<version>' (e.g. '@preview/basic-resume:0.2.8')."
             ),
         }
     }
@@ -574,11 +647,13 @@ fn classify_spec(spec: &str) -> ThemeSpecKind {
 ///
 /// Detection order (no IO performed until the path branch is taken):
 ///
-/// 1. Specs starting with `@preview/` return
-///    [`ThemeResolveError::PackageSpecDeferredToStageC`]. Stage A
-///    recognizes the shape; Stage B's `ferrocv theme install`
-///    populates the local cache; Stage C wires render-time resolution
-///    against that cache.
+/// 1. Specs starting with `@preview/` resolve through the offline
+///    installer cache (gated behind the `install` Cargo feature):
+///    cache hits return [`ResolvedTheme::Owned`]; cache misses
+///    return [`ThemeResolveError::PreviewCacheMiss`] so the CLI can
+///    point at `ferrocv themes install`. On default builds (no
+///    `install` feature) the spec is rejected with
+///    [`ThemeResolveError::PreviewSpecRequiresInstallFeature`].
 /// 2. Specs carrying path-indicative signals — a leading `.` or `/`,
 ///    any `/` or `\` separator, or a `.typ` suffix — take the
 ///    local-path branch: the CLI reads the bytes at the path,
@@ -596,14 +671,15 @@ fn classify_spec(spec: &str) -> ThemeSpecKind {
 ///
 /// # Offline guarantee
 ///
-/// This function performs no network calls — the `@preview/...` branch
-/// fails fast without touching the filesystem or the network, upholding
-/// CONSTITUTION §6.1. Stage A introduces no network-capable code.
+/// This function performs no network calls. The `@preview/...` branch
+/// reads only from the local installer cache populated by a prior
+/// `ferrocv themes install`; on cache miss it returns a clean error
+/// pointing at the install subcommand and never invokes the
+/// network-capable installer module transitively
+/// (CONSTITUTION §6.1, post-Stage-B amendment).
 pub fn resolve_theme(spec: &str) -> Result<ResolvedTheme, ThemeResolveError> {
     match classify_spec(spec) {
-        ThemeSpecKind::PreviewPackage => Err(ThemeResolveError::PackageSpecDeferredToStageC {
-            spec: spec.to_owned(),
-        }),
+        ThemeSpecKind::PreviewPackage => resolve_preview_package(spec),
         ThemeSpecKind::LocalPath => resolve_local_path(spec),
         ThemeSpecKind::BundledName => match find_theme(spec) {
             Some(theme) => Ok(ResolvedTheme::Bundled(theme)),
@@ -613,6 +689,44 @@ pub fn resolve_theme(spec: &str) -> Result<ResolvedTheme, ThemeResolveError> {
             }),
         },
     }
+}
+
+/// Resolve an `@preview/<name>:<version>` spec via the local installer
+/// cache.
+///
+/// Default-features build: returns
+/// [`ThemeResolveError::PreviewSpecRequiresInstallFeature`] without
+/// touching the filesystem — the cache reader is not compiled in.
+///
+/// `install`-feature build: parses the spec via the same parser the
+/// installer uses, then delegates to
+/// [`crate::package_cache::resolve_preview_spec_from_cache`]. That
+/// helper reads only from the cache directory; it never imports
+/// [`crate::install::fetch`] or any other network-capable module, so
+/// render and validate stay fully offline even on cache miss.
+#[cfg(not(feature = "install"))]
+fn resolve_preview_package(spec: &str) -> Result<ResolvedTheme, ThemeResolveError> {
+    Err(ThemeResolveError::PreviewSpecRequiresInstallFeature {
+        spec: spec.to_owned(),
+    })
+}
+
+#[cfg(feature = "install")]
+fn resolve_preview_package(spec: &str) -> Result<ResolvedTheme, ThemeResolveError> {
+    // Parse failures get their own variant so the user sees an
+    // actionable "expected '@preview/<name>:<version>'" message rather
+    // than a circular "run themes install <bad spec>" hint that would
+    // hit the same parse failure.
+    let parsed = match crate::install::spec::parse_spec(spec) {
+        Ok(p) => p,
+        Err(err) => {
+            return Err(ThemeResolveError::PreviewSpecInvalid {
+                spec: spec.to_owned(),
+                reason: format!("{err}"),
+            });
+        }
+    };
+    crate::package_cache::resolve_preview_spec_from_cache(&parsed).map(ResolvedTheme::Owned)
 }
 
 /// Read a local-path `.typ` file into an [`OwnedTheme`].
@@ -759,15 +873,103 @@ mod tests {
         }
     }
 
+    /// On the default build (no `install` feature) `@preview/...`
+    /// specs are rejected with a clear "rebuild with --features
+    /// install" hint — the cache reader is not in the binary.
+    #[cfg(not(feature = "install"))]
     #[test]
-    fn resolve_theme_preview_spec_defers_to_stage_c() {
+    fn resolve_theme_preview_spec_requires_install_feature() {
         let err = resolve_theme("@preview/basic-resume:0.2.8")
-            .expect_err("preview specs must error in stage A");
+            .expect_err("preview specs need the install feature on default builds");
         match err {
-            ThemeResolveError::PackageSpecDeferredToStageC { spec } => {
+            ThemeResolveError::PreviewSpecRequiresInstallFeature { spec } => {
                 assert_eq!(spec, "@preview/basic-resume:0.2.8");
             }
-            other => panic!("expected PackageSpecDeferredToStageC, got {other:?}"),
+            other => panic!("expected PreviewSpecRequiresInstallFeature, got {other:?}"),
+        }
+    }
+
+    /// With the `install` feature on, `@preview/...` specs hit the
+    /// cache reader. The cache is empty in this unit test (no fixture
+    /// populated), so we expect a `PreviewCacheMiss` carrying the spec.
+    #[cfg(feature = "install")]
+    #[test]
+    fn resolve_theme_preview_spec_cache_miss_under_install_feature() {
+        // Point FERROCV_CACHE_DIR at an empty tempdir so the resolver
+        // sees a guaranteed cache miss regardless of the developer's
+        // real $HOME cache state. Use a unique tempdir per test so
+        // parallel runs don't share state.
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+
+        // Serialize against every other test that mutates this env
+        // var. Without this, `package_cache::tests` and
+        // `install::cache::tests` (both in the same lib-test binary)
+        // can race with us on `FERROCV_CACHE_DIR` and produce
+        // intermittent failures.
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
+        struct Guard(Option<String>);
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                // SAFETY: caller holds `crate::test_env::ENV_LOCK`
+                // for the lifetime of this guard, so no other
+                // env-var-mutating test runs concurrently.
+                unsafe {
+                    match &self.0 {
+                        Some(v) => std::env::set_var("FERROCV_CACHE_DIR", v),
+                        None => std::env::remove_var("FERROCV_CACHE_DIR"),
+                    }
+                }
+            }
+        }
+        let _guard = Guard(std::env::var("FERROCV_CACHE_DIR").ok());
+        // SAFETY: serialized via `_lock` above.
+        unsafe {
+            std::env::set_var("FERROCV_CACHE_DIR", tmp.path());
+        }
+
+        let err =
+            resolve_theme("@preview/missing-pkg-xyz:0.0.0").expect_err("empty cache must miss");
+        match err {
+            ThemeResolveError::PreviewCacheMiss { spec, .. } => {
+                assert_eq!(spec, "@preview/missing-pkg-xyz:0.0.0");
+            }
+            other => panic!("expected PreviewCacheMiss, got {other:?}"),
+        }
+    }
+
+    /// Malformed `@preview/...` specs surface `PreviewSpecInvalid`,
+    /// not `PreviewCacheMiss`. The earlier variant produced a circular
+    /// "Run: ferrocv themes install <bad spec>" hint that would just
+    /// hit the same parse failure; this test guards against that
+    /// regression.
+    #[cfg(feature = "install")]
+    #[test]
+    fn resolve_theme_malformed_preview_spec_returns_preview_spec_invalid() {
+        // `@preview/foo` with no version separator is the canonical
+        // shape `parse_spec` rejects.
+        let err = resolve_theme("@preview/foo").expect_err("malformed spec must error");
+        match err {
+            ThemeResolveError::PreviewSpecInvalid { spec, reason } => {
+                assert_eq!(spec, "@preview/foo");
+                assert!(
+                    !reason.is_empty(),
+                    "PreviewSpecInvalid reason must be non-empty"
+                );
+                let rendered =
+                    format!("{}", ThemeResolveError::PreviewSpecInvalid { spec, reason });
+                assert!(
+                    rendered.contains("Expected '@preview/<name>:<version>'"),
+                    "user-facing message must point at correct syntax; got: {rendered}"
+                );
+                assert!(
+                    !rendered.to_lowercase().contains("themes install"),
+                    "must not produce a circular 'themes install' hint; got: {rendered}"
+                );
+            }
+            other => panic!("expected PreviewSpecInvalid, got {other:?}"),
         }
     }
 

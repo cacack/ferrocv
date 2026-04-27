@@ -875,15 +875,28 @@ fn render_with_non_utf8_local_path_exits_two() {
     );
 }
 
-/// `@preview/<name>:<version>` specs are recognized but deferred to
-/// stage C of issue #41. The error mentions the spec and points at
-/// the stage B `ferrocv theme install` follow-up.
+/// `@preview/<name>:<version>` specs are recognized and route through
+/// the offline installer cache. With no cache populated (we point
+/// `FERROCV_CACHE_DIR` at an empty tempdir so we never accidentally
+/// hit the real `$HOME/Library/Caches/ferrocv` from a prior install),
+/// the render exits 2 with a message that names the spec and points
+/// at `ferrocv themes install`.
+///
+/// This test runs under both feature sets: with `install` ON the
+/// resolver hits the cache reader and reports a `PreviewCacheMiss`;
+/// with `install` OFF the resolver shortcircuits with a
+/// `PreviewSpecRequiresInstallFeature` error. Both paths must mention
+/// the spec and `ferrocv themes install` so the user always knows
+/// what to do next.
 #[test]
-fn render_with_preview_spec_exits_two_stage_c_hint() {
+fn render_with_preview_spec_exits_two_with_install_hint() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = tmp.path().join("out.pdf");
+    // Empty cache dir guarantees a miss regardless of $HOME state.
+    let empty_cache = tempfile::tempdir().expect("empty cache tempdir");
 
     ferrocv()
+        .env("FERROCV_CACHE_DIR", empty_cache.path())
         .arg("render")
         .arg(fixture("render_full"))
         .arg("--theme")
@@ -895,10 +908,10 @@ fn render_with_preview_spec_exits_two_stage_c_hint() {
         .assert()
         .code(2)
         .stderr(predicate::str::contains("@preview/basic-resume:0.2.8"))
-        .stderr(predicate::str::contains("stage C").or(predicate::str::contains("theme install")));
+        .stderr(predicate::str::contains("ferrocv themes install"));
 
     assert!(
         !out.exists(),
-        "no output file should be written on deferred preview spec"
+        "no output file should be written on uncached preview spec"
     );
 }

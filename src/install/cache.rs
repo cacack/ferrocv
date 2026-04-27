@@ -82,12 +82,15 @@ pub fn ensure_parent_exists(final_path: &Path) -> Result<PathBuf, InstallError> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
     // `std::env::set_var` / `remove_var` are global process state;
     // serialize cache-dir tests so they do not race when the test
-    // runner parallelizes.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    // runner parallelizes. ENV_LOCK lives in `crate::test_env` so all
+    // three sibling test modules that mutate `FERROCV_CACHE_DIR`
+    // (this one, `package_cache::tests`, and `theme::tests`) share
+    // one mutex. A private per-module lock would let parallel
+    // `cargo test` threads race on the env var.
+    use crate::test_env::ENV_LOCK;
 
     /// RAII guard that snapshots and restores an env var. Restoration
     /// happens in `Drop`, so a panicking test body still leaves the

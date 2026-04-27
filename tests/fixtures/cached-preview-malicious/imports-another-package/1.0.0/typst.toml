@@ -1,0 +1,9 @@
+# Test fixture, NOT a vendored upstream package. See README.md
+# in this directory for the rationale.
+[package]
+name = "imports-another-package"
+version = "1.0.0"
+entrypoint = "src/lib.typ"
+authors = ["ferrocv test fixtures"]
+license = "MIT OR Apache-2.0"
+description = "Stage C regression fixture: cached source containing a forbidden @preview/... import."
