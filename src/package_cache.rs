@@ -356,11 +356,16 @@ mod tests {
                     expected_path,
                 } => {
                     assert_eq!(spec, "@preview/missing-pkg:1.0.0");
+                    // Compare via Path components rather than a string
+                    // substring check — on Windows the separator is
+                    // `\` and `to_string_lossy().contains("a/b")`
+                    // returns false even when the path does end with
+                    // those components. `Path::ends_with` is
+                    // separator-agnostic.
+                    let suffix = Path::new("missing-pkg").join("1.0.0");
                     assert!(
-                        expected_path
-                            .to_string_lossy()
-                            .contains("missing-pkg/1.0.0"),
-                        "expected path must point at missing-pkg/1.0.0; got: {}",
+                        expected_path.ends_with(&suffix),
+                        "expected path must end with missing-pkg/1.0.0; got: {}",
                         expected_path.display(),
                     );
                 }
