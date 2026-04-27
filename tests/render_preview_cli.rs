@@ -212,8 +212,8 @@ fn render_preview_cache_miss_exits_two_with_install_hint() {
 /// surrounding theme resolved from the offline cache, an inline
 /// `#import "@preview/..."` inside that theme's source still triggers
 /// `FerrocvWorld::source` / `file` package rejection. The render
-/// fails to compile (exit 2) with a diagnostic that mentions the
-/// rejected package or "package" / "not found".
+/// fails to compile (exit 2) with a diagnostic that names the
+/// rejected package and signals a package-resolution failure.
 #[test]
 fn preview_import_in_cached_theme_source_still_rejected() {
     let cache = tempfile::TempDir::new().expect("tempdir cache");
@@ -225,6 +225,16 @@ fn preview_import_in_cached_theme_source_still_rejected() {
     );
     let out = cache.path().join("out.pdf");
 
+    // The fixture's `src/lib.typ` does `#import "@preview/cetz:0.2.0":
+    // *"`. The diagnostic from `FerrocvWorld`'s package rejection
+    // path must (a) name `cetz` (the rejected import — deterministic
+    // per the fixture) AND (b) carry a package-resolution signal
+    // ("package" or "not found"). The conjunction is strictly
+    // narrower than the previous OR-over-loose-phrases predicate,
+    // which any compile error could satisfy — a regression that
+    // broke World-layer rejection but still failed for some other
+    // reason (Typst syntax error in the fixture, unrelated panic)
+    // would have passed silently.
     ferrocv()
         .env("FERROCV_CACHE_DIR", cache.path())
         .arg("render")
@@ -237,12 +247,8 @@ fn preview_import_in_cached_theme_source_still_rejected() {
         .arg(&out)
         .assert()
         .code(2)
-        .stderr(
-            predicate::str::contains("preview")
-                .or(predicate::str::contains("cetz"))
-                .or(predicate::str::contains("package"))
-                .or(predicate::str::contains("not found")),
-        );
+        .stderr(predicate::str::contains("cetz"))
+        .stderr(predicate::str::contains("package").or(predicate::str::contains("not found")));
 
     assert!(
         !out.exists(),
