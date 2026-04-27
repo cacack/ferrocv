@@ -528,6 +528,18 @@ pub enum ThemeResolveError {
         /// The raw spec the user typed.
         spec: String,
     },
+    /// The user supplied a string starting with `@preview/` that is
+    /// not a syntactically valid spec. The previous design folded this
+    /// into [`Self::PreviewCacheMiss`], but that produced a circular
+    /// hint ("Run: ferrocv themes install <bad spec>" — which would
+    /// hit the same parse failure). Splitting it lets the CLI print a
+    /// pointed "expected `@preview/<name>:<version>`" message instead.
+    PreviewSpecInvalid {
+        /// The raw spec the user typed.
+        spec: String,
+        /// Human-readable explanation from the spec parser.
+        reason: String,
+    },
 }
 
 impl std::fmt::Display for ThemeResolveError {
@@ -576,6 +588,11 @@ impl std::fmt::Display for ThemeResolveError {
                 "theme '{spec}' requires a build with the `install` Cargo feature. \
                  Rebuild with `cargo install ferrocv --features install`, \
                  then run `ferrocv themes install {spec}` before this render."
+            ),
+            ThemeResolveError::PreviewSpecInvalid { spec, reason } => write!(
+                f,
+                "invalid Typst Universe spec '{spec}': {reason}. \
+                 Expected '@preview/<name>:<version>' (e.g. '@preview/basic-resume:0.2.8')."
             ),
         }
     }
@@ -696,15 +713,16 @@ fn resolve_preview_package(spec: &str) -> Result<ResolvedTheme, ThemeResolveErro
 
 #[cfg(feature = "install")]
 fn resolve_preview_package(spec: &str) -> Result<ResolvedTheme, ThemeResolveError> {
-    // Parsing failures surface as PreviewCacheMiss with a synthetic
-    // path so the CLI mapping stays simple and the user sees a
-    // useful hint. Anything past `parse_spec` is a real cache lookup.
+    // Parse failures get their own variant so the user sees an
+    // actionable "expected '@preview/<name>:<version>'" message rather
+    // than a circular "run themes install <bad spec>" hint that would
+    // hit the same parse failure.
     let parsed = match crate::install::spec::parse_spec(spec) {
         Ok(p) => p,
         Err(err) => {
-            return Err(ThemeResolveError::PreviewCacheMiss {
+            return Err(ThemeResolveError::PreviewSpecInvalid {
                 spec: spec.to_owned(),
-                expected_path: std::path::PathBuf::from(format!("<invalid spec: {err}>")),
+                reason: format!("{err}"),
             });
         }
     };
@@ -882,17 +900,22 @@ mod tests {
         // real $HOME cache state. Use a unique tempdir per test so
         // parallel runs don't share state.
         let tmp = tempfile::TempDir::new().expect("tempdir");
-        // SAFETY: this is a single-threaded unit test entry point;
-        // the env var is restored on Drop via the local guard below.
+
+        // Serialize against every other test that mutates this env
+        // var. Without this, `package_cache::tests` and
+        // `install::cache::tests` (both in the same lib-test binary)
+        // can race with us on `FERROCV_CACHE_DIR` and produce
+        // intermittent failures.
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
+
         struct Guard(Option<String>);
         impl Drop for Guard {
             fn drop(&mut self) {
-                // SAFETY: tests in this module are not invoked from
-                // multiple threads concurrently with respect to this
-                // env var (the `install` feature gates this whole
-                // block, and the only sibling test that writes
-                // `FERROCV_CACHE_DIR` lives in `package_cache.rs`
-                // and serializes through its own mutex).
+                // SAFETY: caller holds `crate::test_env::ENV_LOCK`
+                // for the lifetime of this guard, so no other
+                // env-var-mutating test runs concurrently.
                 unsafe {
                     match &self.0 {
                         Some(v) => std::env::set_var("FERROCV_CACHE_DIR", v),
@@ -902,7 +925,7 @@ mod tests {
             }
         }
         let _guard = Guard(std::env::var("FERROCV_CACHE_DIR").ok());
-        // SAFETY: same justification as in Drop above.
+        // SAFETY: serialized via `_lock` above.
         unsafe {
             std::env::set_var("FERROCV_CACHE_DIR", tmp.path());
         }
@@ -914,6 +937,39 @@ mod tests {
                 assert_eq!(spec, "@preview/missing-pkg-xyz:0.0.0");
             }
             other => panic!("expected PreviewCacheMiss, got {other:?}"),
+        }
+    }
+
+    /// Malformed `@preview/...` specs surface `PreviewSpecInvalid`,
+    /// not `PreviewCacheMiss`. The earlier variant produced a circular
+    /// "Run: ferrocv themes install <bad spec>" hint that would just
+    /// hit the same parse failure; this test guards against that
+    /// regression.
+    #[cfg(feature = "install")]
+    #[test]
+    fn resolve_theme_malformed_preview_spec_returns_preview_spec_invalid() {
+        // `@preview/foo` with no version separator is the canonical
+        // shape `parse_spec` rejects.
+        let err = resolve_theme("@preview/foo").expect_err("malformed spec must error");
+        match err {
+            ThemeResolveError::PreviewSpecInvalid { spec, reason } => {
+                assert_eq!(spec, "@preview/foo");
+                assert!(
+                    !reason.is_empty(),
+                    "PreviewSpecInvalid reason must be non-empty"
+                );
+                let rendered =
+                    format!("{}", ThemeResolveError::PreviewSpecInvalid { spec, reason });
+                assert!(
+                    rendered.contains("Expected '@preview/<name>:<version>'"),
+                    "user-facing message must point at correct syntax; got: {rendered}"
+                );
+                assert!(
+                    !rendered.to_lowercase().contains("themes install"),
+                    "must not produce a circular 'themes install' hint; got: {rendered}"
+                );
+            }
+            other => panic!("expected PreviewSpecInvalid, got {other:?}"),
         }
     }
 

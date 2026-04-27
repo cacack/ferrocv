@@ -277,9 +277,11 @@ fn collect_typ_files(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
 
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    // Shared with `install::cache::tests` and `theme::tests` — all
+    // three mutate `FERROCV_CACHE_DIR` and must serialize through one
+    // process-wide lock. See `crate::test_env`.
+    use crate::test_env::ENV_LOCK;
 
     /// Snapshot+restore guard for `FERROCV_CACHE_DIR` so a panicking
     /// test body still leaves the env intact.

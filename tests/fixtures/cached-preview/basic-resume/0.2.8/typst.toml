@@ -1,4 +1,4 @@
-# Test fixture, NOT a vendored upstream package. See VENDORING.md
+# Test fixture, NOT a vendored upstream package. See README.md
 # in this directory for the rationale.
 [package]
 name = "basic-resume"

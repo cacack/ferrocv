@@ -7,6 +7,8 @@ pub mod install;
 #[cfg(feature = "install")]
 pub mod package_cache;
 pub mod render;
+#[cfg(test)]
+mod test_env;
 pub mod theme;
 pub mod validate;
 

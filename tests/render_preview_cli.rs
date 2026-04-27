@@ -41,10 +41,13 @@ fn ferrocv() -> Command {
 }
 
 /// Recursively copy `src` into `dst`, creating `dst` if it does not
-/// exist. Symlinks are followed and rematerialized as plain files in
-/// the destination — fixture trees do not contain symlinks, but if a
+/// exist. Plain files and directories are copied; anything else
+/// (symlinks, devices, FIFOs) trips the explicit `else` arm and
+/// panics. Fixture trees do not contain such entries today, but if a
 /// regression introduces one we want the test to fail loudly rather
-/// than silently exclude it.
+/// than silently exclude it (the `is_dir`/`is_file` checks both return
+/// `false` for symlinks, so without the explicit panic arm a symlinked
+/// file would be silently dropped from the staged cache).
 fn copy_dir_recursive(src: &Path, dst: &Path) {
     std::fs::create_dir_all(dst).expect("mkdir destination");
     for entry in std::fs::read_dir(src).expect("read_dir") {
@@ -56,6 +59,12 @@ fn copy_dir_recursive(src: &Path, dst: &Path) {
             copy_dir_recursive(&from, &to);
         } else if ft.is_file() {
             std::fs::copy(&from, &to).expect("copy file");
+        } else {
+            panic!(
+                "unexpected non-file/non-dir entry in fixture: {} (file_type: {:?})",
+                from.display(),
+                ft,
+            );
         }
     }
 }
