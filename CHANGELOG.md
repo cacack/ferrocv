@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.6.0](https://github.com/cacack/ferrocv/compare/v0.5.0...v0.6.0) (2026-04-28)
+
+
+### Features
+
+* **cli:** `ferrocv themes install <spec>` subcommand ([bfe9920](https://github.com/cacack/ferrocv/commit/bfe9920309b54901f0cb5e40c6c80cba7cd81dd7))
+* **cli:** default --format html to html-minimal theme ([4b01e3d](https://github.com/cacack/ferrocv/commit/4b01e3d24981e9d486d076f94339f70f71edd191)), closes [#64](https://github.com/cacack/ferrocv/issues/64)
+* **install:** fetch + extract Typst Universe packages to cache ([380dec0](https://github.com/cacack/ferrocv/commit/380dec0c667e30d380aac474c5631df8b0119824))
+* **install:** scenario coverage with a local fixture HTTP server ([1b0f7ae](https://github.com/cacack/ferrocv/commit/1b0f7aebd4583b31eee09dc350ead4ca79ed2e2f))
+* **themes:** add basic-resume theme adapter ([b52332c](https://github.com/cacack/ferrocv/commit/b52332c557036068b831a7759bfdcbe8dd69112f)), closes [#37](https://github.com/cacack/ferrocv/issues/37)
+* **themes:** add native html-minimal theme source ([8a4e1a7](https://github.com/cacack/ferrocv/commit/8a4e1a72f658bf0d16a39373df39628212553747)), closes [#64](https://github.com/cacack/ferrocv/issues/64)
+* **themes:** assert html-minimal semantic-HTML default via tests ([d2d5a57](https://github.com/cacack/ferrocv/commit/d2d5a57a02cbcceb6408f4dfd131418561d6b51f))
+* **themes:** register html-minimal in theme registry ([6da0af6](https://github.com/cacack/ferrocv/commit/6da0af67f73621c0c5dd27aa7e7395580b024cef)), closes [#64](https://github.com/cacack/ferrocv/issues/64)
+* **themes:** resolve --theme from local filesystem paths ([056de47](https://github.com/cacack/ferrocv/commit/056de470ea77f5f436fe7f17ee351b3d122a33ca))
+* **themes:** resolve @preview/... specs from local installer cache ([7dda1fe](https://github.com/cacack/ferrocv/commit/7dda1fef55f7880c70a1bb6e4eb293d6082cd449))
+
+
+### Bug Fixes
+
+* **test:** use Path::ends_with for cross-platform cache-miss assertion ([96260cd](https://github.com/cacack/ferrocv/commit/96260cd5820a3fbbbea260501f5eb4a98057f406))
+
 ## [0.5.0](https://github.com/cacack/ferrocv/compare/v0.4.0...v0.5.0) (2026-04-20)
 
 
