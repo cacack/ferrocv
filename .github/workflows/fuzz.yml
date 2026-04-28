@@ -57,9 +57,16 @@ jobs:
           cp tests/fixtures/*.json fuzz/corpus/parse/
           cp tests/fixtures/*.json fuzz/corpus/validate/
 
+      # Pin the build target to the runner's actual host triple. The
+      # cargo-fuzz binary installed by taiki-e/install-action is itself
+      # musl-linked, and cargo-fuzz defaults to its own build target —
+      # which causes it to invoke `cargo build --target
+      # x86_64-unknown-linux-musl` here, where (a) the musl std isn't
+      # installed and (b) AddressSanitizer is incompatible with musl's
+      # static libc. Forcing -gnu sidesteps both.
       - name: Fuzz ${{ matrix.target }}
         working-directory: fuzz
-        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=120
+        run: cargo +nightly fuzz run --target x86_64-unknown-linux-gnu ${{ matrix.target }} -- -max_total_time=120
 
       - name: Upload crash artifacts
         if: failure()
