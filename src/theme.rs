@@ -36,13 +36,13 @@
 //!
 //! # Why a static slice, not a `HashMap` or `ThemeRegistry`
 //!
-//! Phase 2 ships five themes total: three adapters
-//! (`typst-jsonresume-cv`, `fantastic-cv`, `modern-cv`) and two native
-//! themes (`text-minimal`, `html-minimal`). A linear scan over
-//! `THEMES` is O(n) for small n; CONSTITUTION §5 ("simple now,
-//! iterate later") calls for the narrower solution here. Generalizing
-//! to a hashed lookup or a builder pattern should wait for a caller
-//! that actually needs it.
+//! Phase 2/3 ships six themes total: four adapters
+//! (`typst-jsonresume-cv`, `fantastic-cv`, `modern-cv`, `basic-resume`)
+//! and two native themes (`text-minimal`, `html-minimal`). A linear
+//! scan over `THEMES` is O(n) for small n; CONSTITUTION §5 ("simple
+//! now, iterate later") calls for the narrower solution here.
+//! Generalizing to a hashed lookup or a builder pattern should wait
+//! for a caller that actually needs it.
 //!
 //! # Theme resolution: bundled vs. local-path
 //!
@@ -121,6 +121,13 @@ const FANTASTIC_CV_PREFIX: &str = "/themes/fantastic-cv";
 /// fields stay in lockstep. If this prefix changes, every file path
 /// in [`MODERN_CV`] updates in one place.
 const MODERN_CV_PREFIX: &str = "/themes/modern-cv";
+
+/// Virtual-path prefix for this theme's files inside the World.
+///
+/// Centralized as a private `const` so the `files` and `entrypoint`
+/// fields stay in lockstep. If this prefix changes, every file path
+/// in [`BASIC_RESUME`] updates in one place.
+const BASIC_RESUME_PREFIX: &str = "/themes/basic-resume";
 
 /// Adapter for [`fruggiero/typst-jsonresume-cv`]'s `basic-resume`
 /// theme, vendored under `assets/themes/typst-jsonresume-cv/`.
@@ -225,6 +232,39 @@ const _: () = {
     assert!(!MODERN_CV_PREFIX.is_empty());
 };
 
+/// Adapter for [`stuxf/basic-typst-resume-template`] (Typst Universe
+/// `basic-resume`), vendored under `assets/themes/basic-resume/`.
+///
+/// Like [`MODERN_CV`] this is a **patched** vendor: the upstream pulls
+/// `@preview/scienceicons` for an ORCID glyph, which CONSTITUTION §6.1
+/// forbids. The single icon call site was rewritten to a plain
+/// `"ORCID:"` text prefix; see `assets/themes/basic-resume/VENDORING.md`
+/// for the patch record. The entrypoint is our authored glue
+/// `resume.typ`, which imports the patched `basic-resume.typ` from the
+/// same virtual directory.
+///
+/// [`stuxf/basic-typst-resume-template`]: https://github.com/stuxf/basic-typst-resume-template
+pub const BASIC_RESUME: Theme = Theme {
+    name: "basic-resume",
+    files: &[
+        (
+            // Must agree with BASIC_RESUME_PREFIX + "/basic-resume.typ".
+            concat!("/themes/basic-resume", "/basic-resume.typ"),
+            include_bytes!("../assets/themes/basic-resume/basic-resume.typ"),
+        ),
+        (
+            concat!("/themes/basic-resume", "/resume.typ"),
+            include_bytes!("../assets/themes/basic-resume/resume.typ"),
+        ),
+    ],
+    entrypoint: concat!("/themes/basic-resume", "/resume.typ"),
+};
+
+// Compile-time sanity check: same shape as for TYPST_JSONRESUME_CV.
+const _: () = {
+    assert!(!BASIC_RESUME_PREFIX.is_empty());
+};
+
 /// Virtual path of the `text-minimal` theme's entrypoint.
 ///
 /// Single per-file constant used by both the [`Theme::files`] key and
@@ -316,18 +356,19 @@ pub const HTML_MINIMAL: Theme = Theme {
 
 /// All themes registered with this build of `ferrocv`.
 ///
-/// Phase 2 ships three adapters (`typst-jsonresume-cv`, `fantastic-cv`,
-/// `modern-cv`) and two native themes (`text-minimal`, `html-minimal`).
-/// See the module doc for why this is a `&[&Theme]` rather than a
-/// `HashMap` or a builder pattern — a linear scan over a handful of
-/// entries is fine, and CONSTITUTION §5 calls for the narrower
-/// solution until a caller actually needs more. See the module doc as
-/// well for the §4 deferral on splitting native themes into their own
-/// module.
+/// Phase 2/3 ships four adapters (`typst-jsonresume-cv`, `fantastic-cv`,
+/// `modern-cv`, `basic-resume`) and two native themes (`text-minimal`,
+/// `html-minimal`). See the module doc for why this is a `&[&Theme]`
+/// rather than a `HashMap` or a builder pattern — a linear scan over
+/// a handful of entries is fine, and CONSTITUTION §5 calls for the
+/// narrower solution until a caller actually needs more. See the
+/// module doc as well for the §4 deferral on splitting native themes
+/// into their own module.
 pub const THEMES: &[&Theme] = &[
     &TYPST_JSONRESUME_CV,
     &FANTASTIC_CV,
     &MODERN_CV,
+    &BASIC_RESUME,
     &TEXT_MINIMAL,
     &HTML_MINIMAL,
 ];

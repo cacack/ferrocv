@@ -198,11 +198,10 @@ make install-tools
 
 - [`fruggiero/typst-jsonresume-cv`](https://github.com/fruggiero/typst-jsonresume-cv)
   — Typst template that accepts JSON Resume data.
-- [`fantastic-cv`](https://typst.app/universe/package/fantastic-cv/)
-  — Typst Universe template with a JSON Resume-shaped API.
-- [`basic-resume`](https://typst.app/universe/package/basic-resume/)
-  and [`modern-cv`](https://typst.app/universe/package/modern-cv/)
-  — Typst Universe resume templates we plan to ship adapters for.
+- [`fantastic-cv`](https://typst.app/universe/package/fantastic-cv/),
+  [`modern-cv`](https://typst.app/universe/package/modern-cv/), and
+  [`basic-resume`](https://typst.app/universe/package/basic-resume/)
+  — Typst Universe resume templates wrapped as bundled adapters.
 - [`jsonresume-renderer`](https://lib.rs/crates/jsonresume-renderer)
   — Rust CLI that renders JSON Resume via Tera templates (not Typst).
 - [`typst.ts`](https://github.com/Myriad-Dreamin/typst.ts) — proves Typst
