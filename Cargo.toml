@@ -86,7 +86,7 @@ flate2 = { version = "1", optional = true }
 # with `flate2::read::GzDecoder` to handle the registry's `.tar.gz`.
 tar = { version = "0.4", optional = true }
 # TOML parser for `typst.toml` package manifests.
-toml = { version = "0.8", optional = true }
+toml = { version = "1.1", optional = true }
 # Platform-specific user cache directory (XDG on Linux, Caches on
 # macOS, LocalAppData on Windows). Overridable via `FERROCV_CACHE_DIR`
 # for tests and power users.
