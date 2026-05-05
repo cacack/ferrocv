@@ -20,7 +20,7 @@
 
 #![cfg(feature = "install")]
 
-use std::io::{Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -127,6 +127,97 @@ fn fixture_tarball(name: &str, version: &str) -> Vec<u8> {
     build_tarball(&[
         ("typst.toml", toml_src.as_bytes()),
         ("src/lib.typ", b"#let version = \"0.0.0\"\n"),
+    ])
+}
+
+/// Spawn an HTTP/1.1 server that serves a small route table over up
+/// to `routes.len()` connections. Each request's URL path (the
+/// `/<file>` portion of `GET /<file> HTTP/1.1`) is matched against the
+/// route table's first column; on a hit the configured status+body is
+/// served, otherwise a 404 with empty body is served. The server
+/// thread terminates after handling the expected number of
+/// connections.
+///
+/// Route key is the URL-path tail (`<name>-<version>.tar.gz`) — the
+/// `fetch.rs::tarball_url` builder appends that tail to the registry
+/// root. So a route registered as `("basic-resume-0.2.8.tar.gz", 200,
+/// body)` matches the request `GET /basic-resume-0.2.8.tar.gz`.
+fn spawn_multi_route_fixture_server(routes: Vec<(String, u16, Vec<u8>)>) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port");
+    let addr = listener.local_addr().expect("addr").to_string();
+    let n = routes.len();
+    std::thread::spawn(move || {
+        for _ in 0..n {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let path = read_request_path(&mut stream).unwrap_or_default();
+                let key = path.trim_start_matches('/').to_owned();
+                match routes.iter().find(|(p, _, _)| *p == key) {
+                    Some((_, status, body)) => {
+                        let reason = if *status == 200 { "OK" } else { "Error" };
+                        let headers = format!(
+                            "HTTP/1.1 {status} {reason}\r\n\
+                             Content-Type: application/gzip\r\n\
+                             Content-Length: {len}\r\n\
+                             Connection: close\r\n\r\n",
+                            len = body.len(),
+                        );
+                        let _ = stream.write_all(headers.as_bytes());
+                        let _ = stream.write_all(body);
+                    }
+                    None => {
+                        let _ = stream.write_all(
+                            b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        );
+                    }
+                }
+                let _ = stream.flush();
+            }
+        }
+    });
+    addr
+}
+
+/// Read the HTTP request line and drain headers. Returns the URL path
+/// (e.g. `/basic-resume-0.2.8.tar.gz` from `GET /basic-resume-0.2.8.tar.gz HTTP/1.1`).
+fn read_request_path(stream: &mut TcpStream) -> std::io::Result<String> {
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    // `GET /<path> HTTP/1.1\r\n`
+    let path = line.split_whitespace().nth(1).unwrap_or("").to_owned();
+    // Drain remaining headers up to the blank line so the client's
+    // write doesn't block before we reply.
+    loop {
+        let mut next = String::new();
+        let read = reader.read_line(&mut next)?;
+        if read == 0 || next == "\r\n" || next == "\n" {
+            break;
+        }
+    }
+    Ok(path)
+}
+
+/// Build a fixture tarball whose `src/lib.typ` "declares" each
+/// `(dep_name, dep_version)` as a string literal. The `imports.rs`
+/// scanner picks these strings up as transitive `@preview/...` specs
+/// regardless of surrounding Typst grammar; using string literals
+/// rather than real `#import` statements keeps render-time tests
+/// independent of the `FerrocvWorld` `@preview/...` rejection (which
+/// would refuse to compile a real inline import).
+fn fixture_tarball_with_imports(name: &str, version: &str, imports: &[(&str, &str)]) -> Vec<u8> {
+    let toml_src = format!(
+        "[package]\nname = \"{name}\"\nversion = \"{version}\"\nentrypoint = \"src/lib.typ\"\n",
+    );
+    let mut lib = String::from("// auto-generated test fixture\n");
+    for (dep_name, dep_version) in imports {
+        lib.push_str(&format!(
+            "#let _annotation_{dep_name} = \"@preview/{dep_name}:{dep_version}\"\n",
+        ));
+    }
+    lib.push_str("// end\n");
+    build_tarball(&[
+        ("typst.toml", toml_src.as_bytes()),
+        ("src/lib.typ", lib.as_bytes()),
     ])
 }
 
@@ -280,6 +371,230 @@ fn install_surfaces_404_as_http_status_error() {
         .stderr(predicate::str::contains("HTTP 404"));
 
     let _ = std::fs::remove_dir_all(&cache_dir);
+}
+
+/// Recursive install: a primary package whose source declares a
+/// single transitive `@preview/...` reference. The driver must fetch
+/// both packages and the CLI must report the transitive in its stderr
+/// summary (tagged `[installed]`).
+#[test]
+fn install_recursively_fetches_one_transitive_dep() {
+    let _guard = env_lock().lock().unwrap_or_else(|p| p.into_inner());
+    let cache_dir = tempfile::TempDir::new().expect("temp cache");
+    let a_tarball = fixture_tarball_with_imports("a", "1.0.0", &[("b", "2.0.0")]);
+    let b_tarball = fixture_tarball_with_imports("b", "2.0.0", &[]);
+    let routes = vec![
+        ("a-1.0.0.tar.gz".to_owned(), 200, a_tarball),
+        ("b-2.0.0.tar.gz".to_owned(), 200, b_tarball),
+    ];
+    let addr = spawn_multi_route_fixture_server(routes);
+    let registry = format!("http://{addr}");
+
+    let expected_a = cache_dir
+        .path()
+        .join("packages")
+        .join("preview")
+        .join("a")
+        .join("1.0.0");
+    let expected_b = cache_dir
+        .path()
+        .join("packages")
+        .join("preview")
+        .join("b")
+        .join("2.0.0");
+
+    ferrocv()
+        .env("FERROCV_CACHE_DIR", cache_dir.path())
+        .env("FERROCV_REGISTRY_URL", &registry)
+        .arg("themes")
+        .arg("install")
+        .arg("@preview/a:1.0.0")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            expected_a.display().to_string().as_str(),
+        ))
+        .stderr(predicate::str::contains("installed @preview/a:1.0.0"))
+        .stderr(predicate::str::contains(
+            "also resolved 1 transitive dep(s):",
+        ))
+        .stderr(predicate::str::contains("@preview/b:2.0.0"))
+        .stderr(predicate::str::contains("[installed]"));
+
+    assert!(
+        expected_a.join("typst.toml").is_file(),
+        "primary's typst.toml must be cached at {}",
+        expected_a.display(),
+    );
+    assert!(
+        expected_b.join("typst.toml").is_file(),
+        "transitive dep's typst.toml must be cached at {}",
+        expected_b.display(),
+    );
+}
+
+/// Recursive install with a cycle in the declared `@preview/...`
+/// imports must terminate cleanly via the visited set: each package
+/// is fetched once, the cycle is silent in the summary, and both
+/// packages end up cached on disk.
+#[test]
+fn install_recursive_handles_cycle() {
+    let _guard = env_lock().lock().unwrap_or_else(|p| p.into_inner());
+    let cache_dir = tempfile::TempDir::new().expect("temp cache");
+    let a_tarball = fixture_tarball_with_imports("a", "1.0.0", &[("b", "2.0.0")]);
+    let b_tarball = fixture_tarball_with_imports("b", "2.0.0", &[("a", "1.0.0")]);
+    // Two routes — each served at most once. If the visited set is
+    // broken and the driver re-requests one, the server will refuse
+    // (already exited) and the test will fail loudly.
+    let routes = vec![
+        ("a-1.0.0.tar.gz".to_owned(), 200, a_tarball),
+        ("b-2.0.0.tar.gz".to_owned(), 200, b_tarball),
+    ];
+    let addr = spawn_multi_route_fixture_server(routes);
+    let registry = format!("http://{addr}");
+
+    let expected_a = cache_dir
+        .path()
+        .join("packages")
+        .join("preview")
+        .join("a")
+        .join("1.0.0");
+    let expected_b = cache_dir
+        .path()
+        .join("packages")
+        .join("preview")
+        .join("b")
+        .join("2.0.0");
+
+    let output = ferrocv()
+        .env("FERROCV_CACHE_DIR", cache_dir.path())
+        .env("FERROCV_REGISTRY_URL", &registry)
+        .arg("themes")
+        .arg("install")
+        .arg("@preview/a:1.0.0")
+        .assert()
+        .success();
+
+    assert!(
+        expected_a.join("typst.toml").is_file(),
+        "primary cached at {}",
+        expected_a.display(),
+    );
+    assert!(
+        expected_b.join("typst.toml").is_file(),
+        "transitive cached at {}",
+        expected_b.display(),
+    );
+
+    // Cycle must not cause `b` to appear more than once in the
+    // transitive summary.
+    let stderr = String::from_utf8_lossy(&output.get_output().stderr).into_owned();
+    let occurrences = stderr.matches("@preview/b:2.0.0").count();
+    assert_eq!(
+        occurrences, 1,
+        "cycle must yield exactly one mention of @preview/b:2.0.0 in stderr; got {occurrences} in:\n{stderr}",
+    );
+}
+
+/// Recursive install hard-fails when a transitive 404s. Exit code is 2,
+/// stderr names the parent + child + inner cause, and the primary's
+/// cache entry is left in place per the prompt-001 contract.
+#[test]
+fn install_recursive_hard_fails_when_transitive_404s() {
+    let _guard = env_lock().lock().unwrap_or_else(|p| p.into_inner());
+    let cache_dir = tempfile::TempDir::new().expect("temp cache");
+    let a_tarball = fixture_tarball_with_imports("a", "1.0.0", &[("missing", "9.9.9")]);
+    let routes = vec![
+        ("a-1.0.0.tar.gz".to_owned(), 200, a_tarball),
+        (
+            "missing-9.9.9.tar.gz".to_owned(),
+            404,
+            b"not found".to_vec(),
+        ),
+    ];
+    let addr = spawn_multi_route_fixture_server(routes);
+    let registry = format!("http://{addr}");
+
+    ferrocv()
+        .env("FERROCV_CACHE_DIR", cache_dir.path())
+        .env("FERROCV_REGISTRY_URL", &registry)
+        .arg("themes")
+        .arg("install")
+        .arg("@preview/a:1.0.0")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "failed to install transitive dep @preview/missing:9.9.9 required by @preview/a:1.0.0",
+        ))
+        .stderr(predicate::str::contains("404"))
+        .stderr(predicate::str::contains(
+            "primary @preview/a:1.0.0 remains cached",
+        ));
+
+    let primary_path = cache_dir
+        .path()
+        .join("packages")
+        .join("preview")
+        .join("a")
+        .join("1.0.0");
+    // The pipeline's `ensure_parent_exists` mkdirs the package's
+    // parent directory (`packages/preview/missing/`) before the fetch
+    // is attempted — so the parent dir may exist as an empty
+    // breadcrumb. The assertion under test is that the *versioned*
+    // package directory does NOT exist (the only thing that would
+    // satisfy a future cache-hit short-circuit).
+    let missing_versioned_path = cache_dir
+        .path()
+        .join("packages")
+        .join("preview")
+        .join("missing")
+        .join("9.9.9");
+    assert!(
+        primary_path.join("typst.toml").is_file(),
+        "primary's cache entry must remain after a transitive failure (at {})",
+        primary_path.display(),
+    );
+    assert!(
+        !missing_versioned_path.exists(),
+        "failed transitive must not leave a versioned cache entry behind (at {})",
+        missing_versioned_path.display(),
+    );
+}
+
+/// Backward-compatibility: when a recursively-installed package has
+/// zero transitive deps, stderr matches the existing single-package
+/// summary text exactly. The "transitive dep(s)" summary line is
+/// suppressed entirely so older scripts that expected the simpler
+/// stderr shape keep working.
+#[test]
+fn install_no_transitives_keeps_existing_summary_text() {
+    let _guard = env_lock().lock().unwrap_or_else(|p| p.into_inner());
+    let cache_dir = tempfile::TempDir::new().expect("temp cache");
+    let a_tarball = fixture_tarball_with_imports("a", "1.0.0", &[]);
+    let routes = vec![("a-1.0.0.tar.gz".to_owned(), 200, a_tarball)];
+    let addr = spawn_multi_route_fixture_server(routes);
+    let registry = format!("http://{addr}");
+
+    let expected_a = cache_dir
+        .path()
+        .join("packages")
+        .join("preview")
+        .join("a")
+        .join("1.0.0");
+
+    ferrocv()
+        .env("FERROCV_CACHE_DIR", cache_dir.path())
+        .env("FERROCV_REGISTRY_URL", &registry)
+        .arg("themes")
+        .arg("install")
+        .arg("@preview/a:1.0.0")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            expected_a.display().to_string().as_str(),
+        ))
+        .stderr(predicate::str::contains("installed @preview/a:1.0.0"))
+        .stderr(predicate::str::contains("transitive dep(s)").not());
 }
 
 /// Live-network test: exercise the real `packages.typst.org` endpoint.
