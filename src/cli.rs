@@ -259,8 +259,17 @@ fn run_themes_install(spec: &str) -> Result<ExitCode> {
             // summary on stderr so `$(ferrocv themes install ...)`
             // captures just the primary's path. Transitive dep paths
             // intentionally do NOT appear on stdout — preserves the
-            // existing single-path scripting contract.
-            println!("{}", primary_path.display());
+            // existing single-path scripting contract. Mirrors the
+            // locked-stdout error handling in `run_themes_list` so a
+            // broken pipe surfaces as a clean exit-2, not a panic.
+            {
+                let stdout = io::stdout();
+                let mut stdout = stdout.lock();
+                if let Err(err) = writeln!(stdout, "{}", primary_path.display()) {
+                    eprintln!("error: failed to write install path to stdout: {err}");
+                    return Ok(ExitCode::from(2));
+                }
+            }
             match &summary.primary {
                 InstallOutcome::Installed { .. } => {
                     eprintln!(
@@ -284,8 +293,11 @@ fn run_themes_install(spec: &str) -> Result<ExitCode> {
             // for the primary's `installed`/`already cached` line keep
             // working unchanged.
             if !summary.transitive.is_empty() {
+                // "resolved" rather than "installed" because the list
+                // mixes fresh installs and cache hits — see the per-dep
+                // `[installed|cached]` tag for the actual outcome.
                 eprintln!(
-                    "also installed {} transitive dep(s):",
+                    "also resolved {} transitive dep(s):",
                     summary.transitive.len(),
                 );
                 for (dep_spec, outcome) in &summary.transitive {

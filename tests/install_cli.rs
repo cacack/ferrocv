@@ -416,7 +416,7 @@ fn install_recursively_fetches_one_transitive_dep() {
         ))
         .stderr(predicate::str::contains("installed @preview/a:1.0.0"))
         .stderr(predicate::str::contains(
-            "also installed 1 transitive dep(s):",
+            "also resolved 1 transitive dep(s):",
         ))
         .stderr(predicate::str::contains("@preview/b:2.0.0"))
         .stderr(predicate::str::contains("[installed]"));

@@ -343,13 +343,17 @@ fn spawn_multi_route_fixture_server(routes: Vec<(String, u16, Vec<u8>)>) -> Stri
     addr
 }
 
-/// `lib.typ` body for fixture `a`: imports nothing for compile
-/// purposes (no `#import "@preview/..."` line — `FerrocvWorld` would
-/// reject it), but contains a string literal that the imports.rs
-/// scanner picks up as a transitive `@preview/b:2.0.0` reference. A
+/// `lib.typ` body for fixture `a`. Contains a `_annotation_b` string
+/// literal that the install-time `imports.rs` scanner picks up as a
+/// transitive `@preview/b:2.0.0` reference, but does NOT use a real
+/// `#import "@preview/..."` directive — `FerrocvWorld` rejects those
+/// at render time per CONSTITUTION §6.1, and the existing
+/// `cached_preview_malicious_inline_import_is_still_rejected`
+/// regression test in this file pins that behavior down. The decoy is
+/// the smallest construct that exercises the install-time scanner
+/// without entangling with the World's render-time rejection. A
 /// minimal `#show` rule reads the JSON Resume `name` field so the
-/// renderer has something observable to emit. The `_annotation_b`
-/// `#let` binding has no side effect on the rendered output.
+/// renderer has something observable to emit.
 const A_LIB_TYP: &str = r##"// auto-generated test fixture for ferrocv recursive-install scenario
 #let _annotation_b = "@preview/b:2.0.0"
 #let resume = json("/resume.json")
@@ -373,12 +377,24 @@ fn fixture_tarball_with_lib(name: &str, version: &str, lib_body: &str) -> Vec<u8
     ])
 }
 
-/// Render works fully offline against a recursively-installed
-/// `@preview/...` package. Proves the user-facing payoff of issue
-/// #102: install populates the cache with the primary AND its
-/// transitives via the network-permitted entry point, then `render`
-/// can find the primary in the offline cache and compile against it
-/// without re-fetching anything.
+/// Offline `render` succeeds against the *primary* of a recursively
+/// installed `@preview/...` package. Proves what issue #102 actually
+/// delivers: install populates the cache with the primary AND its
+/// transitives via the network-permitted entry point, and then
+/// `render` can find the primary in the offline cache and compile it
+/// without re-fetching.
+///
+/// **Scope intentionally narrow.** This does NOT prove that render-time
+/// `#import "@preview/<name>:<version>"` from theme source resolves
+/// out of the cache — that path is still rejected by `FerrocvWorld`
+/// per CONSTITUTION §6.1, and the
+/// `cached_preview_malicious_inline_import_is_still_rejected` test
+/// elsewhere in this file is the regression for that rejection. The
+/// transitive package (`b`) is referenced only as a string-literal
+/// decoy so the install-time scanner picks it up; it is never compiled
+/// against at render time. The user-facing benefit of recursive install
+/// is therefore one-shot cache hydration plus future-proofing, not
+/// chained imports at compile time.
 ///
 /// Two phases:
 ///
@@ -387,7 +403,7 @@ fn fixture_tarball_with_lib(name: &str, version: &str, lib_body: &str) -> Vec<u8
 /// 2. `ferrocv render --theme @preview/a:1.0.0` with NO registry
 ///    pointer set. Must succeed using only the local cache.
 #[test]
-fn render_against_recursively_installed_package_works_offline() {
+fn render_against_recursively_installed_primary_works_offline() {
     let _guard = env_lock().lock().unwrap_or_else(|p| p.into_inner());
     let cache_dir = tempfile::TempDir::new().expect("temp cache");
 

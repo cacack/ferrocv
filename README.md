@@ -94,20 +94,28 @@ machine-readable contract.
 
 `themes install` resolves transitive `@preview/...` dependencies
 recursively: installing one package also fetches every `@preview/...`
-package its source imports, so a subsequent offline `ferrocv render`
-against that package finds everything it needs in the cache. Cycles in
-declared imports are detected and do not loop. The primary's cache
+package its source declares as an import, hydrating the local cache for
+the whole graph in one invocation instead of N. Cycles in declared
+imports are detected and do not loop; missing transitive packages
+hard-fail with the primary still cached for retry. The primary's cache
 path is printed to stdout (one line, scriptable); a human-readable
-summary of any transitive deps installed or already cached is printed
-to stderr, e.g.
+summary of any transitive deps newly installed or already cached is
+printed to stderr, e.g.
 
 ```
 $ ferrocv themes install @preview/foo:1.0
 /.../packages/preview/foo/1.0
 installed @preview/foo:1.0 into /.../packages/preview/foo/1.0
-also installed 1 transitive dep(s):
+also resolved 1 transitive dep(s):
   @preview/bar:2.0 -> /.../packages/preview/bar/2.0 [installed]
 ```
+
+`render` resolves a top-level `--theme @preview/<name>:<version>` spec
+out of this cache (see `--theme resolution modes` below); inline
+`#import "@preview/..."` directives inside theme source remain
+rejected at render time per CONSTITUTION §6.1, so the practical benefit
+of recursive install today is one-shot cache hydration rather than
+chained imports at compile time.
 
 ### `--theme` resolution modes
 
@@ -143,8 +151,12 @@ Exit codes (shared across subcommands):
 - `2` — usage error, IO error, JSON parse error, unknown theme/format,
   render error, or unrecoverable stdout write failure
 
-No network is touched — the schema, theme, and fonts are all compiled
-into the binary.
+No network is touched by `render` or `validate` — the schema, theme,
+and fonts are all compiled into the binary, and any `@preview/...`
+theme spec is resolved from the local install cache. The only
+network-permitted entry point is `themes install` (gated behind the
+`install` Cargo feature), which fetches from the Typst Universe
+registry over HTTPS; see CONSTITUTION §6.1.
 
 ## GitHub Actions
 
