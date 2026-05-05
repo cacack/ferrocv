@@ -134,6 +134,15 @@ enum ThemesCommands {
     /// spec, and atomically renames the staged directory onto its
     /// final cache path.
     ///
+    /// Transitive resolution: any `@preview/<name>:<version>` packages
+    /// imported by the requested package's source are fetched and cached
+    /// recursively. A summary of the transitive deps installed (or already
+    /// cached) is printed to stderr after the primary's status line.
+    /// Cycles in declared imports terminate cleanly. A transitive install
+    /// failure (404, malformed tarball, etc.) leaves the primary's cache
+    /// entry in place so a re-run after fixing the transitive does not
+    /// re-fetch the parent.
+    ///
     /// Cache location:
     /// - Default: `{dirs::cache_dir()}/ferrocv/packages/preview/<name>/<version>/`
     ///   (Linux: `$XDG_CACHE_HOME or $HOME/.cache/...`,
@@ -233,7 +242,7 @@ pub fn run() -> Result<ExitCode> {
 /// block so the compiler refuses to build it into the default binary.
 #[cfg(feature = "install")]
 fn run_themes_install(spec: &str) -> Result<ExitCode> {
-    use crate::install::{self, InstallError};
+    use crate::install::{self, InstallError, pipeline::InstallOutcome};
 
     let parsed = match install::spec::parse_spec(spec) {
         Ok(s) => s,
@@ -243,29 +252,85 @@ fn run_themes_install(spec: &str) -> Result<ExitCode> {
         }
     };
 
-    match install::install(&parsed) {
-        Ok(install::pipeline::InstallOutcome::Installed { path }) => {
+    match install::install_with_transitive(&parsed) {
+        Ok(summary) => {
+            let primary_path = summary.primary.path().clone();
             // One-line path on stdout for scripting; human-readable
             // summary on stderr so `$(ferrocv themes install ...)`
-            // captures just the path.
-            println!("{}", path.display());
-            eprintln!(
-                "installed @preview/{}:{} into {}",
-                parsed.name,
-                parsed.version,
-                path.display(),
-            );
+            // captures just the primary's path. Transitive dep paths
+            // intentionally do NOT appear on stdout — preserves the
+            // existing single-path scripting contract.
+            println!("{}", primary_path.display());
+            match &summary.primary {
+                InstallOutcome::Installed { .. } => {
+                    eprintln!(
+                        "installed @preview/{}:{} into {}",
+                        parsed.name,
+                        parsed.version,
+                        primary_path.display(),
+                    );
+                }
+                InstallOutcome::AlreadyCached { .. } => {
+                    eprintln!(
+                        "@preview/{}:{} already cached at {}",
+                        parsed.name,
+                        parsed.version,
+                        primary_path.display(),
+                    );
+                }
+            }
+            // Summary of transitive deps, if any. Suppressed entirely
+            // when zero transitives so older scripts that grep stderr
+            // for the primary's `installed`/`already cached` line keep
+            // working unchanged.
+            if !summary.transitive.is_empty() {
+                eprintln!(
+                    "also installed {} transitive dep(s):",
+                    summary.transitive.len(),
+                );
+                for (dep_spec, outcome) in &summary.transitive {
+                    let tag = match outcome {
+                        InstallOutcome::Installed { .. } => "installed",
+                        InstallOutcome::AlreadyCached { .. } => "cached",
+                    };
+                    eprintln!(
+                        "  @preview/{}:{} -> {} [{}]",
+                        dep_spec.name,
+                        dep_spec.version,
+                        outcome.path().display(),
+                        tag,
+                    );
+                }
+            }
             Ok(ExitCode::SUCCESS)
         }
-        Ok(install::pipeline::InstallOutcome::AlreadyCached { path }) => {
-            println!("{}", path.display());
+        Err(InstallError::TransitiveDepFailed {
+            parent,
+            child,
+            source,
+        }) => {
             eprintln!(
-                "@preview/{}:{} already cached at {}",
-                parsed.name,
-                parsed.version,
-                path.display(),
+                "error: failed to install transitive dep {child} required by {parent}: {source}",
             );
-            Ok(ExitCode::SUCCESS)
+            // Per the prompt-001 contract the primary's cache entry is
+            // left in place on a transitive failure. Tell the user
+            // where to find it so they don't think they need to
+            // manually clean up before retrying. `package_cache_dir`
+            // is a pure path computation; if even that fails (e.g.
+            // CacheDirUnresolved) we silently skip the note rather
+            // than emit a misleading path.
+            if let Ok(p) = install::cache::package_cache_dir(&parsed.name, &parsed.version)
+                && p.is_dir()
+            {
+                eprintln!(
+                    "note: primary @preview/{}:{} remains cached at {}; \
+                     rerun after fixing the transitive",
+                    parsed.name,
+                    parsed.version,
+                    p.display(),
+                );
+            }
+            Ok(ExitCode::from(2))
         }
         Err(err) => {
             eprintln!("error: {err}");

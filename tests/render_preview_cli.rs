@@ -21,10 +21,16 @@
 
 #![cfg(feature = "install")]
 
+use std::io::{BufRead, BufReader, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use assert_cmd::Command;
+use flate2::Compression;
+use flate2::write::GzEncoder;
 use predicates::prelude::*;
+use tar::{Builder, Header};
 
 /// Absolute path to a JSON fixture under `tests/fixtures/`.
 fn fixture(name: &str) -> PathBuf {
@@ -253,6 +259,200 @@ fn preview_import_in_cached_theme_source_still_rejected() {
     assert!(
         !out.exists(),
         "no output file should be written on inline-import rejection"
+    );
+}
+
+// ---------------------------------------------------------------------
+// Render-after-recursive-install scenario
+//
+// CONSTITUTION §5: third caller is the trigger to extract a shared
+// helper. With only this file and `tests/install_cli.rs` needing the
+// multi-route fixture server, we deliberately duplicate the helper
+// rather than introduce a `tests/common/` module just for two callers.
+// ---------------------------------------------------------------------
+
+fn env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn build_tarball(entries: &[(&str, &[u8])]) -> Vec<u8> {
+    let mut gz = GzEncoder::new(Vec::new(), Compression::default());
+    {
+        let mut tar = Builder::new(&mut gz);
+        for (path, bytes) in entries {
+            let mut header = Header::new_gnu();
+            header.set_path(path).expect("valid tar path");
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            tar.append(&header, *bytes).expect("append entry");
+        }
+        tar.finish().expect("finalize tar");
+    }
+    gz.finish().expect("finalize gzip")
+}
+
+fn read_request_path(stream: &mut TcpStream) -> std::io::Result<String> {
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    let path = line.split_whitespace().nth(1).unwrap_or("").to_owned();
+    loop {
+        let mut next = String::new();
+        let read = reader.read_line(&mut next)?;
+        if read == 0 || next == "\r\n" || next == "\n" {
+            break;
+        }
+    }
+    Ok(path)
+}
+
+fn spawn_multi_route_fixture_server(routes: Vec<(String, u16, Vec<u8>)>) -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind ephemeral port");
+    let addr = listener.local_addr().expect("addr").to_string();
+    let n = routes.len();
+    std::thread::spawn(move || {
+        for _ in 0..n {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let path = read_request_path(&mut stream).unwrap_or_default();
+                let key = path.trim_start_matches('/').to_owned();
+                match routes.iter().find(|(p, _, _)| *p == key) {
+                    Some((_, status, body)) => {
+                        let reason = if *status == 200 { "OK" } else { "Error" };
+                        let headers = format!(
+                            "HTTP/1.1 {status} {reason}\r\n\
+                             Content-Type: application/gzip\r\n\
+                             Content-Length: {len}\r\n\
+                             Connection: close\r\n\r\n",
+                            len = body.len(),
+                        );
+                        let _ = stream.write_all(headers.as_bytes());
+                        let _ = stream.write_all(body);
+                    }
+                    None => {
+                        let _ = stream.write_all(
+                            b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                        );
+                    }
+                }
+                let _ = stream.flush();
+            }
+        }
+    });
+    addr
+}
+
+/// `lib.typ` body for fixture `a`: imports nothing for compile
+/// purposes (no `#import "@preview/..."` line — `FerrocvWorld` would
+/// reject it), but contains a string literal that the imports.rs
+/// scanner picks up as a transitive `@preview/b:2.0.0` reference. A
+/// minimal `#show` rule reads the JSON Resume `name` field so the
+/// renderer has something observable to emit. The `_annotation_b`
+/// `#let` binding has no side effect on the rendered output.
+const A_LIB_TYP: &str = r##"// auto-generated test fixture for ferrocv recursive-install scenario
+#let _annotation_b = "@preview/b:2.0.0"
+#let resume = json("/resume.json")
+= #resume.basics.name
+"##;
+
+/// `lib.typ` body for fixture `b`: leaf, declares no further imports.
+/// `b` is never compiled at render time in this scenario — its
+/// presence in the cache is the only thing being exercised.
+const B_LIB_TYP: &str = r##"// auto-generated test fixture for ferrocv recursive-install scenario
+= Leaf placeholder
+"##;
+
+fn fixture_tarball_with_lib(name: &str, version: &str, lib_body: &str) -> Vec<u8> {
+    let toml_src = format!(
+        "[package]\nname = \"{name}\"\nversion = \"{version}\"\nentrypoint = \"src/lib.typ\"\n",
+    );
+    build_tarball(&[
+        ("typst.toml", toml_src.as_bytes()),
+        ("src/lib.typ", lib_body.as_bytes()),
+    ])
+}
+
+/// Render works fully offline against a recursively-installed
+/// `@preview/...` package. Proves the user-facing payoff of issue
+/// #102: install populates the cache with the primary AND its
+/// transitives via the network-permitted entry point, then `render`
+/// can find the primary in the offline cache and compile against it
+/// without re-fetching anything.
+///
+/// Two phases:
+///
+/// 1. `ferrocv themes install @preview/a:1.0.0` against a multi-route
+///    fixture server. Exits 0; both `a` and `b` cached on disk.
+/// 2. `ferrocv render --theme @preview/a:1.0.0` with NO registry
+///    pointer set. Must succeed using only the local cache.
+#[test]
+fn render_against_recursively_installed_package_works_offline() {
+    let _guard = env_lock().lock().unwrap_or_else(|p| p.into_inner());
+    let cache_dir = tempfile::TempDir::new().expect("temp cache");
+
+    // Phase 1: recursive install.
+    let a_tarball = fixture_tarball_with_lib("a", "1.0.0", A_LIB_TYP);
+    let b_tarball = fixture_tarball_with_lib("b", "2.0.0", B_LIB_TYP);
+    let routes = vec![
+        ("a-1.0.0.tar.gz".to_owned(), 200, a_tarball),
+        ("b-2.0.0.tar.gz".to_owned(), 200, b_tarball),
+    ];
+    let addr = spawn_multi_route_fixture_server(routes);
+    let registry = format!("http://{addr}");
+
+    ferrocv()
+        .env("FERROCV_CACHE_DIR", cache_dir.path())
+        .env("FERROCV_REGISTRY_URL", &registry)
+        .arg("themes")
+        .arg("install")
+        .arg("@preview/a:1.0.0")
+        .assert()
+        .success();
+
+    let cached_a = cache_dir
+        .path()
+        .join("packages")
+        .join("preview")
+        .join("a")
+        .join("1.0.0");
+    let cached_b = cache_dir
+        .path()
+        .join("packages")
+        .join("preview")
+        .join("b")
+        .join("2.0.0");
+    assert!(cached_a.join("typst.toml").is_file(), "a must be cached");
+    assert!(cached_b.join("typst.toml").is_file(), "b must be cached");
+
+    // Phase 2: offline render. NO `FERROCV_REGISTRY_URL` set; the
+    // fixture server thread has already exited so any network attempt
+    // from `render` would fail fast.
+    let out = cache_dir.path().join("out.txt");
+    ferrocv()
+        .env("FERROCV_CACHE_DIR", cache_dir.path())
+        .env_remove("FERROCV_REGISTRY_URL")
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg("@preview/a:1.0.0")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(
+        out.exists(),
+        "offline render must produce output at {}",
+        out.display(),
+    );
+    let body = std::fs::read_to_string(&out).expect("text output must be UTF-8");
+    assert!(
+        !body.is_empty(),
+        "offline render output must be non-empty; got {body:?}",
     );
 }
 
