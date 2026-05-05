@@ -99,6 +99,13 @@ them requires a constitutional amendment, not a feature PR.
   is never invoked transitively from `render` or `validate`; its
   network-capable dependencies live behind a Cargo feature flag
   (`install`) so the default build contains no network code at all.
+  Fetches initiated by `themes install` recursively include the
+  transitive `@preview/...` packages reachable from the requested
+  package's source — installing `@preview/foo:1.0` whose source imports
+  `@preview/bar:2.0` populates both cache entries in one invocation.
+  This is a same-class extension of the existing network surface, not
+  a new one: the registry, the protocol, the integrity model, and the
+  `install` Cargo feature gate are unchanged.
   Package integrity is established by TLS only: `ferrocv` does not
   verify upstream checksums or signatures for v1 because the Typst
   Universe registry does not publish them. Users who need stronger

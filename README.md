@@ -92,6 +92,23 @@ stdin if no path is given.
 sorted lexicographically, with no decoration — a stable
 machine-readable contract.
 
+`themes install` resolves transitive `@preview/...` dependencies
+recursively: installing one package also fetches every `@preview/...`
+package its source imports, so a subsequent offline `ferrocv render`
+against that package finds everything it needs in the cache. Cycles in
+declared imports are detected and do not loop. The primary's cache
+path is printed to stdout (one line, scriptable); a human-readable
+summary of any transitive deps installed or already cached is printed
+to stderr, e.g.
+
+```
+$ ferrocv themes install @preview/foo:1.0
+/.../packages/preview/foo/1.0
+installed @preview/foo:1.0 into /.../packages/preview/foo/1.0
+also installed 1 transitive dep(s):
+  @preview/bar:2.0 -> /.../packages/preview/bar/2.0 [installed]
+```
+
 ### `--theme` resolution modes
 
 `--theme <spec>` accepts three shapes, evaluated in this order:
