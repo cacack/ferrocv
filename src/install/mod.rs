@@ -39,11 +39,12 @@
 pub mod cache;
 pub mod extract;
 pub mod fetch;
+pub mod imports;
 pub mod manifest;
 pub mod pipeline;
 pub mod spec;
 
-pub use pipeline::install;
+pub use pipeline::{InstallSummary, install, install_with_transitive};
 pub use spec::PackageSpec;
 
 use std::fmt;
@@ -133,6 +134,27 @@ pub enum InstallError {
     /// and `FERROCV_CACHE_DIR` was unset. Rare — `dirs::cache_dir()`
     /// returns `Some` on every common platform.
     CacheDirUnresolved,
+    /// A transitive `@preview/...` dep failed to install. The pipeline
+    /// installed `parent` successfully but a package reachable from
+    /// `parent`'s source could not be cached — typically because the
+    /// transitive is not on the registry (404) or its tarball is
+    /// malformed.
+    ///
+    /// The parent's cache entry is left in place so a re-run does not
+    /// re-fetch it; callers are expected to fix the transitive
+    /// (correct typo, file an upstream bug, vendor manually) and rerun.
+    TransitiveDepFailed {
+        /// The package whose source declared the failing import,
+        /// rendered as `@preview/<name>:<version>`.
+        parent: String,
+        /// The transitive spec that failed to install, rendered as
+        /// `@preview/<name>:<version>`.
+        child: String,
+        /// The underlying install error from the recursive call.
+        /// Boxed so `InstallError` stays a small enum (silences
+        /// `clippy::large_enum_variant`).
+        source: Box<InstallError>,
+    },
 }
 
 impl fmt::Display for InstallError {
@@ -185,6 +207,16 @@ impl fmt::Display for InstallError {
                      set FERROCV_CACHE_DIR to an explicit path and retry",
                 )
             }
+            InstallError::TransitiveDepFailed {
+                parent,
+                child,
+                source,
+            } => {
+                write!(
+                    f,
+                    "failed to install transitive dep {child} required by {parent}: {source}",
+                )
+            }
         }
     }
 }
@@ -193,7 +225,53 @@ impl std::error::Error for InstallError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             InstallError::Io { source, .. } | InstallError::Extract { source, .. } => Some(source),
+            InstallError::TransitiveDepFailed { source, .. } => Some(&**source),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transitive_dep_failed_displays_both_specs() {
+        let err = InstallError::TransitiveDepFailed {
+            parent: "@preview/parent:1.0.0".to_owned(),
+            child: "@preview/child:2.0.0".to_owned(),
+            source: Box::new(InstallError::HttpStatus {
+                url: "https://packages.typst.org/preview/child-2.0.0.tar.gz".to_owned(),
+                status: 404,
+            }),
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("@preview/parent:1.0.0"),
+            "Display must mention parent: {msg}",
+        );
+        assert!(
+            msg.contains("@preview/child:2.0.0"),
+            "Display must mention child: {msg}",
+        );
+    }
+
+    #[test]
+    fn transitive_dep_failed_chains_source() {
+        use std::error::Error;
+        let inner = InstallError::HttpStatus {
+            url: "https://packages.typst.org/preview/child-2.0.0.tar.gz".to_owned(),
+            status: 404,
+        };
+        let err = InstallError::TransitiveDepFailed {
+            parent: "@preview/parent:1.0.0".to_owned(),
+            child: "@preview/child:2.0.0".to_owned(),
+            source: Box::new(inner),
+        };
+        let chained = err.source().expect("source must be reachable");
+        assert!(
+            chained.to_string().contains("404"),
+            "chained source must surface the inner cause: {chained}",
+        );
     }
 }
