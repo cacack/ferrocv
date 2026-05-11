@@ -46,6 +46,74 @@ themes, and native themes do not depend on adapter internals
 guide will land when there's a second native theme to draw the
 pattern from.
 
+## Two ways to use a Typst Universe template
+
+There is one **adapter shape contributors author today**: the
+vendored adapter pattern (the rest of this guide). It is the
+recommended path for any new adapter.
+
+There is one **runtime feature users can reach for** that does not
+require an adapter at all: install-based passthrough. The user runs
+`ferrocv themes install @preview/<name>:<ver>` once, then renders with
+`--theme @preview/<name>:<ver>`. The CLI's resolver materializes the
+cached package and hands it to the same compile pipeline bundled
+themes use; no `assets/themes/<name>/` directory, no `Theme` registry
+entry, no in-tree code at all.
+
+| | Vendored adapter (contributor work) | Install-based passthrough (user only, today) |
+|---|---|---|
+| Default-build availability | yes | no — needs `--features install` |
+| User setup | none — bundled in the binary | `ferrocv themes install @preview/...:<ver>` once |
+| In-tree footprint | `assets/themes/<name>/` + `src/theme.rs` registration + goldens | none |
+| JSON Resume mapping | authored glue (`resume.typ`) | upstream must read `/resume.json` itself |
+| Upstream `@preview/...` imports | patched out at vendor time | **not supported** at render — see Limitations |
+| Upstream-bump diff | re-vendor + re-apply patches | bump version, re-run `themes install` |
+| Selectable via `--theme <bundled-name>` | yes | no — must spell `@preview/<name>:<ver>` |
+
+### When install-based passthrough actually works
+
+The runtime resolver is real (see `tests/render_preview_cli.rs::render_resolves_preview_from_cache`),
+but it only renders a usable resume when **both** of these hold for
+the upstream package:
+
+1. **The package is JSON-Resume-aware out of the box.** The package's
+   own entrypoint must read JSON Resume from `/resume.json` and emit
+   content. There is no glue layer in the install-based path: whatever
+   the package's `entrypoint` does is what gets compiled. Most Typst
+   Universe resume templates expect their own bespoke data shape (a
+   `cv` dict the user fills in), so they will compile to a blank or
+   placeholder document against an arbitrary `resume.json`.
+2. **The package's source contains no `@preview/...` imports.** The
+   `FerrocvWorld` rejects every `@preview/...` import at render time
+   for CONSTITUTION §6.1 reasons (`src/render.rs::source` and
+   `src/render.rs::file`); cache hydration of transitive deps via
+   `themes install` does not change that. A regression test
+   (`tests/render_preview_cli.rs::preview_import_in_cached_theme_source_still_rejected`)
+   pins the rejection.
+
+If either condition fails, the install-based path is not usable for
+that upstream today. Vendor it instead.
+
+### Limitations: the in-tree shim shape is not viable yet
+
+A natural-looking pattern — register a `Theme` whose entrypoint is a
+small ferrocv-authored shim that does
+`#import "@preview/<name>:<ver>": *` and then maps JSON Resume fields
+into the template's API — **does not work today**. The World rejects
+the `@preview/...` import even when the package is in the cache.
+
+This is the gap that would let install-based adapters carry glue (and
+therefore work for upstreams that aren't JSON-Resume-aware, which is
+most of them). It is tracked separately; until that lands, the
+recommendation is unchanged: **for any adapter that needs glue or
+imports `@preview/...` packages, write a vendored adapter** using the
+walkthrough below.
+
+The recursive transitive-install machinery from issue #102 is in
+place precisely so that, once the World learns to resolve cached
+`@preview/...` imports, the cache layer is already populated and
+ready. For now, treat that machinery as future-proofing.
+
 ## Anatomy of an adapter
 
 The repo currently ships four adapters, deliberately picked to
@@ -79,6 +147,11 @@ and the glue continues to work as long as the upstream signatures
 didn't change.
 
 ## Step-by-step: adding a new adapter
+
+This walkthrough is the **vendored adapter** path — the only adapter
+shape contributors author today. See "Two ways to use a Typst Universe
+template" above for why install-based passthrough is a runtime
+feature, not a contributor pattern.
 
 ### 1. Vet the upstream
 
