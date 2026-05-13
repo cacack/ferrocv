@@ -2,6 +2,8 @@
 /dist
 Cargo.lock.bak
 .prompts
+.claude/settings.local.json
+.claude/worktrees/
 
 # Added by ggshield
 .cache_ggshield
