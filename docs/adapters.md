@@ -60,59 +60,48 @@ cached package and hands it to the same compile pipeline bundled
 themes use; no `assets/themes/<name>/` directory, no `Theme` registry
 entry, no in-tree code at all.
 
-| | Vendored adapter (contributor work) | Install-based passthrough (user only, today) |
-|---|---|---|
-| Default-build availability | yes | no — needs `--features install` |
-| User setup | none — bundled in the binary | `ferrocv themes install @preview/...:<ver>` once |
-| In-tree footprint | `assets/themes/<name>/` + `src/theme.rs` registration + goldens | none |
-| JSON Resume mapping | authored glue (`resume.typ`) | upstream must read `/resume.json` itself |
-| Upstream `@preview/...` imports | patched out at vendor time | **not supported** at render — see Limitations |
-| Upstream-bump diff | re-vendor + re-apply patches | bump version, re-run `themes install` |
-| Selectable via `--theme <bundled-name>` | yes | no — must spell `@preview/<name>:<ver>` |
+There is also a **third shape, available to contributors today**: an
+**in-tree shim adapter** — a bundled `Theme` whose entrypoint is a
+small ferrocv-authored shim that `#import`s the upstream `@preview/...`
+package and maps JSON Resume fields into the upstream's API. The shim
+ships in-tree and is `--features install`-only, since it relies on
+render-time cache resolution. Issue #114 unlocked this shape by
+teaching the World to resolve `@preview/...` imports from the offline
+cache.
+
+| | Vendored adapter (contributor work) | In-tree shim adapter (contributor work, `install`-only) | Install-based passthrough (user only) |
+|---|---|---|---|
+| Default-build availability | yes | no — needs `--features install` | no — needs `--features install` |
+| User setup | none — bundled in the binary | `ferrocv themes install @preview/...:<ver>` once | `ferrocv themes install @preview/...:<ver>` once |
+| In-tree footprint | `assets/themes/<name>/` + `src/theme.rs` registration + goldens | small `resume.typ` shim + `src/theme.rs` registration + goldens | none |
+| JSON Resume mapping | authored glue (`resume.typ`) | authored glue inside the shim | upstream must read `/resume.json` itself |
+| Upstream `@preview/...` imports | patched out at vendor time | resolved at render time from cache | resolved at render time from cache |
+| Upstream-bump diff | re-vendor + re-apply patches | bump version literals in the shim, re-run `themes install` | bump version, re-run `themes install` |
+| Selectable via `--theme <bundled-name>` | yes | yes | no — must spell `@preview/<name>:<ver>` |
 
 ### When install-based passthrough actually works
 
 The runtime resolver is real (see `tests/render_preview_cli.rs::render_resolves_preview_from_cache`),
-but it only renders a usable resume when **both** of these hold for
-the upstream package:
+but it only renders a usable resume when the upstream package is
+**JSON-Resume-aware out of the box**. The package's own entrypoint
+must read JSON Resume from `/resume.json` and emit content. There is
+no glue layer in the install-based path: whatever the package's
+`entrypoint` does is what gets compiled. Most Typst Universe resume
+templates expect their own bespoke data shape (a `cv` dict the user
+fills in), so they will compile to a blank or placeholder document
+against an arbitrary `resume.json`.
 
-1. **The package is JSON-Resume-aware out of the box.** The package's
-   own entrypoint must read JSON Resume from `/resume.json` and emit
-   content. There is no glue layer in the install-based path: whatever
-   the package's `entrypoint` does is what gets compiled. Most Typst
-   Universe resume templates expect their own bespoke data shape (a
-   `cv` dict the user fills in), so they will compile to a blank or
-   placeholder document against an arbitrary `resume.json`.
-2. **The package's source contains no `@preview/...` imports.** The
-   `FerrocvWorld` rejects every `@preview/...` import at render time
-   for CONSTITUTION §6.1 reasons (`src/render.rs::source` and
-   `src/render.rs::file`); cache hydration of transitive deps via
-   `themes install` does not change that. A regression test
-   (`tests/render_preview_cli.rs::preview_import_in_cached_theme_source_still_rejected`)
-   pins the rejection.
+If the upstream is not JSON-Resume-aware, write either a **vendored
+adapter** (default-features available, no `themes install` step) or an
+**in-tree shim adapter** (smaller in-tree footprint, but requires the
+user to run `themes install` once).
 
-If either condition fails, the install-based path is not usable for
-that upstream today. Vendor it instead.
-
-### Limitations: the in-tree shim shape is not viable yet
-
-A natural-looking pattern — register a `Theme` whose entrypoint is a
-small ferrocv-authored shim that does
-`#import "@preview/<name>:<ver>": *` and then maps JSON Resume fields
-into the template's API — **does not work today**. The World rejects
-the `@preview/...` import even when the package is in the cache.
-
-This is the gap that would let install-based adapters carry glue (and
-therefore work for upstreams that aren't JSON-Resume-aware, which is
-most of them). It is tracked separately; until that lands, the
-recommendation is unchanged: **for any adapter that needs glue or
-imports `@preview/...` packages, write a vendored adapter** using the
-walkthrough below.
-
-The recursive transitive-install machinery from issue #102 is in
-place precisely so that, once the World learns to resolve cached
-`@preview/...` imports, the cache layer is already populated and
-ready. For now, treat that machinery as future-proofing.
+Transitive `@preview/...` imports inside the upstream are no longer a
+blocker for either install-based path: render-time resolution of
+cached `@preview/...` imports lands in issue #114, with the regression
+test `uncached_preview_import_in_cached_theme_source_still_rejected`
+pinning the narrowed §6.1 boundary (imports of *uncached* packages
+still reject, with an install hint).
 
 ## Anatomy of an adapter
 
@@ -353,11 +342,15 @@ often they bite:
   `link(x.url)` where `x.url` might be an empty string will die at
   compile. Guard the call itself, not afterward (see
   `assets/themes/fantastic-cv/VENDORING.md` patch rationale).
-- **`@preview/...` imports are rejected by the World.** Even if the
-  package is harmless in isolation, the import triggers a package
-  resolver that the World refuses to implement (CONSTITUTION §6.1).
+- **`@preview/...` imports are rejected by the World in vendored
+  adapters.** Vendored themes are baked into the binary at compile
+  time; nothing runs `themes install` for them, so the cache reader
+  (which the World uses to resolve cached imports — see issue #114)
+  always misses, and the import errors with `package not found`.
   Either remove the import and inline a stub, or pick a different
-  upstream.
+  upstream. **For an in-tree shim adapter**, the `@preview/...` import
+  is the entire point and is expected to work — the user runs
+  `themes install` once and the cache resolves it at render time.
 - **`datetime.today()` returns `None`.** Defaults like
   `date: datetime.today().display(...)` crash on first call. Replace
   with `date: ""` and let the glue pass an explicit value (or accept

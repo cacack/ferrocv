@@ -35,15 +35,20 @@
 //!   `std::process::Command`, no shelling out to the `typst` CLI,
 //!   ever.
 //! - **§6.1 — No network calls at render time.** The [`FerrocvWorld`]
-//!   does not implement a package resolver. Any `FileId` carrying a
-//!   `PackageSpec` (i.e. `@preview/...` imports) returns
-//!   [`FileError::Package(PackageError::NotFound(_))`]. There is no
-//!   code path by which Typst can reach the network from inside
-//!   `compile_pdf`, `compile_theme`, `compile_text`, or
-//!   `compile_html`. HTML compilation reuses the same World and the
-//!   same `source`/`file` implementations, so the guarantee applies
-//!   uniformly. Tests in `tests/render.rs` enforce this for both PDF
-//!   and HTML paths.
+//!   never fetches a package. Under the `install` Cargo feature, an
+//!   `@preview/...` `FileId` is resolved from the local installer
+//!   cache populated by a prior `ferrocv themes install` — a local
+//!   filesystem read, not a network call (CONSTITUTION §6.1
+//!   same-class extension; see [`resolve_package_file`]). On cache
+//!   miss the World returns [`FileError::Package(PackageError::NotFound(_))`].
+//!   Default-features builds do not compile in the cache reader and
+//!   keep the historical blanket rejection. There is no code path by
+//!   which Typst can reach the network from inside `compile_pdf`,
+//!   `compile_theme`, `compile_text`, or `compile_html`. HTML
+//!   compilation reuses the same World and the same `source`/`file`
+//!   implementations, so the guarantee applies uniformly. Tests in
+//!   `tests/render.rs` and `tests/install_boundary.rs` enforce this
+//!   for both feature shapes and both compile targets.
 //! - **§6.4 — Themes run under Typst's native sandbox, nothing more.**
 //!   We do not add filesystem-wide access, shell-escape, or any
 //!   custom capabilities. The World exposes exactly the virtual
@@ -604,11 +609,37 @@ where
 {
     let diagnostics: Vec<RenderDiagnostic> = diags
         .into_iter()
-        .map(|d| RenderDiagnostic {
-            message: d.message_string(),
+        .map(|d| {
+            let mut message = d.message_string();
+            // When Typst reports "package not found" for an `@preview/...`
+            // spec, append the same actionable install hint the
+            // resolver-time `ThemeResolveError::PreviewCacheMiss` variant
+            // surfaces. The detection is a substring match against
+            // Typst's canonical "package not found (searched for ...)"
+            // format; that string is part of the upstream `PackageError`
+            // Display impl, so it is stable across `ferrocv` versions
+            // bound to a single typst minor. If upstream rewords it the
+            // hint silently disappears — failing open rather than
+            // emitting a misleading nudge.
+            if let Some(spec) = extract_preview_spec_from_package_not_found(&message) {
+                message.push_str(&format!(". Run: ferrocv themes install {spec}"));
+            }
+            RenderDiagnostic { message }
         })
         .collect();
     RenderError { diagnostics }
+}
+
+/// If `message` is Typst's canonical "package not found (searched for
+/// <spec>)" diagnostic and `<spec>` is an `@preview/...` package,
+/// return the spec verbatim. Returns `None` for any other shape, which
+/// includes non-preview namespaces (we only ship resolution for
+/// `@preview/` in v1) and rewordings of the upstream message.
+fn extract_preview_spec_from_package_not_found(message: &str) -> Option<&str> {
+    let prefix = "package not found (searched for ";
+    let after = message.strip_prefix(prefix)?;
+    let spec = after.strip_suffix(')')?;
+    spec.starts_with("@preview/").then_some(spec)
 }
 
 /// Helper trait so we can accept either an owned or borrowed
@@ -819,6 +850,89 @@ fn shared_fonts() -> &'static (LazyHash<FontBook>, Vec<Font>) {
     })
 }
 
+/// Resolve a `@preview/<name>:<version>` `FileId` from the local
+/// installer cache, returning the file's bytes.
+///
+/// Issue #114: prior to this branch, `FerrocvWorld::source` / `::file`
+/// unconditionally rejected every package-rooted `FileId` with
+/// `FileError::Package(NotFound)`. That kept the render path offline but
+/// also broke any cached upstream package whose source contains a real
+/// `#import "@preview/<helper>:<ver>"` directive — including the
+/// recursive-install cache hydration that issue #102 already populates.
+///
+/// Under the `install` Cargo feature, this function reads the requested
+/// file from the cache directory populated by `ferrocv themes install`.
+/// CONSTITUTION §6.1: the cache is a local filesystem read source, not a
+/// network call; we do not import the network-capable installer module
+/// even on cache miss.
+///
+/// Under default features the cache reader is not compiled in, so the
+/// function preserves the historical blanket rejection and `themes
+/// install` is unreachable to begin with.
+///
+/// # Error shape
+///
+/// - Cache directory does not exist: `FileError::Package(PackageError::
+///   NotFound(spec))`. The render diagnostic formatter detects this
+///   exact shape and appends a `ferrocv themes install <spec>` hint.
+/// - File inside the cached package does not exist (e.g. the upstream's
+///   manifest entrypoint is wrong, or a relative import names a missing
+///   sibling): `FileError::NotFound(vpath)`.
+/// - Filesystem IO failure (permissions, etc.): mapped via
+///   `FileError::from_io`.
+#[cfg(feature = "install")]
+fn resolve_package_file(
+    spec: &typst::syntax::package::PackageSpec,
+    vpath: &VirtualPath,
+) -> FileResult<Vec<u8>> {
+    // Bridge from Typst's PackageSpec (EcoString fields, struct
+    // PackageVersion) into our installer-side PackageSpec (String
+    // fields, semver-as-string). The Display impl on Typst's
+    // PackageVersion emits "major.minor.patch" — the exact shape our
+    // cache layout uses.
+    let our_spec = crate::install::spec::PackageSpec {
+        namespace: spec.namespace.to_string(),
+        name: spec.name.to_string(),
+        version: spec.version.to_string(),
+    };
+    // Reject any non-preview namespace up front. v1 only ships
+    // resolution for `@preview/...`; surfacing the rejection as
+    // `Package(NotFound)` keeps the diagnostic shape consistent.
+    if our_spec.namespace != "preview" {
+        return Err(FileError::Package(PackageError::NotFound(spec.clone())));
+    }
+    let fs_path = crate::package_cache::package_file_path(&our_spec, vpath)
+        .ok_or_else(|| FileError::Package(PackageError::NotFound(spec.clone())))?;
+    // If the cache directory itself is absent, surface a structured
+    // "package not found" — the user needs to run `themes install`.
+    // Distinguishing this from a missing inner file is important: the
+    // former implies "package is not on disk at all", the latter
+    // implies "package is here but malformed", and the render
+    // diagnostic formatter only appends the install hint for the
+    // former.
+    let cache_dir =
+        match crate::install::cache::package_cache_dir(&our_spec.name, &our_spec.version) {
+            Ok(p) => p,
+            Err(_) => return Err(FileError::Package(PackageError::NotFound(spec.clone()))),
+        };
+    if !cache_dir.is_dir() {
+        return Err(FileError::Package(PackageError::NotFound(spec.clone())));
+    }
+    std::fs::read(&fs_path).map_err(|err| FileError::from_io(err, &fs_path))
+}
+
+/// Default-features stub: every package-rooted FileId is rejected at
+/// the World layer, exactly as before issue #114. The cache reader
+/// (`crate::package_cache`) is not compiled in, so there is no fallback
+/// path to exercise.
+#[cfg(not(feature = "install"))]
+fn resolve_package_file(
+    spec: &typst::syntax::package::PackageSpec,
+    _vpath: &VirtualPath,
+) -> FileResult<Vec<u8>> {
+    Err(FileError::Package(PackageError::NotFound(spec.clone())))
+}
+
 impl World for FerrocvWorld {
     fn library(&self) -> &LazyHash<Library> {
         shared_library()
@@ -836,10 +950,15 @@ impl World for FerrocvWorld {
         if id == self.entrypoint {
             return Ok(self.entrypoint_source.clone());
         }
-        // §6.1: package-rooted imports are rejected at the World
-        // layer. No package resolver, no network call.
+        // Package-rooted imports: under the `install` Cargo feature,
+        // resolve `@preview/...` FileIds from the local installer cache
+        // (issue #114, CONSTITUTION §6.1 same-class extension). Under
+        // default features the cache reader is not compiled in, so we
+        // keep the blanket rejection.
         if let Some(spec) = id.package() {
-            return Err(FileError::Package(PackageError::NotFound(spec.clone())));
+            let bytes = resolve_package_file(spec, id.vpath())?;
+            let text = std::str::from_utf8(&bytes).map_err(|_| FileError::InvalidUtf8)?;
+            return Ok(Source::new(id, text.to_owned()));
         }
         // Theme files: parse on demand. Caching is deferred (§5) —
         // a fresh `Source` per lookup is cheap enough for Phase 1.
@@ -855,11 +974,13 @@ impl World for FerrocvWorld {
         if id == self.resume_id {
             return Ok(self.resume_bytes.clone());
         }
-        // §6.1: same package-rejection rule as `source`. Anything
-        // claiming to be inside a `@preview/...` package is a network
-        // request we refuse to make.
+        // Package-rooted imports: mirror the `source` branch so the
+        // manifest read (`world.file(@preview/...:typst.toml)`) and any
+        // raw `read()` calls inside a package resolve from the same
+        // local cache the source lookup uses.
         if let Some(spec) = id.package() {
-            return Err(FileError::Package(PackageError::NotFound(spec.clone())));
+            let bytes = resolve_package_file(spec, id.vpath())?;
+            return Ok(Bytes::new(bytes));
         }
         if let Some(bytes) = self.theme_files.get(&id) {
             return Ok(bytes.clone());
@@ -957,6 +1078,33 @@ mod tests {
         assert_eq!(
             out, "",
             "empty document must extract to empty string; got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn preview_spec_extractor_matches_canonical_message() {
+        let msg = "package not found (searched for @preview/basic-resume:0.2.8)";
+        assert_eq!(
+            extract_preview_spec_from_package_not_found(msg),
+            Some("@preview/basic-resume:0.2.8"),
+        );
+    }
+
+    #[test]
+    fn preview_spec_extractor_rejects_non_preview_namespace() {
+        let msg = "package not found (searched for @local/mine:1.0.0)";
+        assert!(
+            extract_preview_spec_from_package_not_found(msg).is_none(),
+            "v1 only surfaces install hints for @preview/ specs",
+        );
+    }
+
+    #[test]
+    fn preview_spec_extractor_rejects_unrelated_messages() {
+        assert!(extract_preview_spec_from_package_not_found("").is_none());
+        assert!(
+            extract_preview_spec_from_package_not_found("file not found (searched at /foo)")
+                .is_none()
         );
     }
 }
