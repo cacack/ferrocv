@@ -14,10 +14,15 @@
 //!   compiles the package against the standard test resume.
 //! - Cache miss: with an empty tempdir as the cache, the same render
 //!   exits 2 with a stderr message pointing at `ferrocv themes install`.
-//! - Inline-import regression: a cached package whose Typst source
-//!   does `#import "@preview/cetz:0.2.0": *"` still fails to compile,
-//!   proving CONSTITUTION §6.1 inline-import rejection survives
-//!   Stage C's pre-`World` resolver.
+//! - Uncached-transitive regression (issue #114 retighten): a cached
+//!   package whose Typst source does `#import "@preview/cetz:0.2.0"`,
+//!   where `cetz` is **not** in the cache, exits 2 with an install
+//!   hint. CONSTITUTION §6.1 rejection narrowed to "package not in
+//!   cache" instead of "any package import"; cached transitives now
+//!   resolve via the World branch added in #114.
+//! - Cached transitive resolution (issue #114): a primary whose source
+//!   has a real `#import "@preview/helper:1.0.0"` resolves the helper
+//!   from cache and the rendered output reflects the helper's exports.
 
 #![cfg(feature = "install")]
 
@@ -214,14 +219,19 @@ fn render_preview_cache_miss_exits_two_with_install_hint() {
     );
 }
 
-/// CONSTITUTION §6.1 inline-import regression: even with the
-/// surrounding theme resolved from the offline cache, an inline
-/// `#import "@preview/..."` inside that theme's source still triggers
-/// `FerrocvWorld::source` / `file` package rejection. The render
-/// fails to compile (exit 2) with a diagnostic that names the
-/// rejected package and signals a package-resolution failure.
+/// Issue #114 retightened regression: post-#114, render-time
+/// `@preview/...` imports resolve from the local cache when the
+/// requested package is present. The §6.1 rejection survives, just
+/// narrower: imports of packages **not in cache** still fail with a
+/// structured "package not found" diagnostic plus an install hint that
+/// names the missing spec.
+///
+/// This pins (a) that the World does not invent a network fetch path
+/// on cache miss, and (b) that the rendered diagnostic carries the
+/// actionable `ferrocv themes install @preview/<name>:<ver>` follow-up
+/// the resolver-time path already surfaces for the *primary* spec.
 #[test]
-fn preview_import_in_cached_theme_source_still_rejected() {
+fn uncached_preview_import_in_cached_theme_source_still_rejected() {
     let cache = tempfile::TempDir::new().expect("tempdir cache");
     stage_cached_package(
         cache.path(),
@@ -232,15 +242,11 @@ fn preview_import_in_cached_theme_source_still_rejected() {
     let out = cache.path().join("out.pdf");
 
     // The fixture's `src/lib.typ` does `#import "@preview/cetz:0.2.0":
-    // *"`. The diagnostic from `FerrocvWorld`'s package rejection
-    // path must (a) name `cetz` (the rejected import — deterministic
-    // per the fixture) AND (b) carry a package-resolution signal
-    // ("package" or "not found"). The conjunction is strictly
-    // narrower than the previous OR-over-loose-phrases predicate,
-    // which any compile error could satisfy — a regression that
-    // broke World-layer rejection but still failed for some other
-    // reason (Typst syntax error in the fixture, unrelated panic)
-    // would have passed silently.
+    // *"`. `cetz` is intentionally NOT staged in the cache, so the new
+    // World branch falls through to the same `Package(NotFound)`
+    // rejection. The diagnostic must (a) name the missing spec, (b)
+    // carry the "package not found" signal, and (c) include the
+    // install hint added by the render-diagnostic formatter.
     ferrocv()
         .env("FERROCV_CACHE_DIR", cache.path())
         .arg("render")
@@ -253,12 +259,90 @@ fn preview_import_in_cached_theme_source_still_rejected() {
         .arg(&out)
         .assert()
         .code(2)
-        .stderr(predicate::str::contains("cetz"))
-        .stderr(predicate::str::contains("package").or(predicate::str::contains("not found")));
+        .stderr(predicate::str::contains("@preview/cetz:0.2.0"))
+        .stderr(predicate::str::contains("package not found"))
+        .stderr(predicate::str::contains(
+            "ferrocv themes install @preview/cetz:0.2.0",
+        ));
 
     assert!(
         !out.exists(),
-        "no output file should be written on inline-import rejection"
+        "no output file should be written on uncached-import rejection"
+    );
+}
+
+/// Issue #114 positive scenario: a cached primary whose source does a
+/// real `#import "@preview/transitive:1.0.0"` resolves the helper from
+/// the same offline cache, the import succeeds, and the rendered text
+/// reflects the helper's exported symbol.
+///
+/// Pre-stages both packages directly (no install round-trip) so the
+/// test stays focused on the render-time World branch. The companion
+/// `render_against_recursively_installed_primary_uses_real_import`
+/// scenario below covers the install → render flow end-to-end.
+#[test]
+fn cached_preview_transitive_import_resolves_from_cache() {
+    let cache = tempfile::TempDir::new().expect("tempdir cache");
+
+    // Helper: exports a single string symbol the primary's source
+    // splices into the rendered output, so the assertion can prove the
+    // import actually executed (rather than the primary having silently
+    // skipped it).
+    let helper_root = cache.path().join("packages/preview/cv-helper/1.0.0");
+    std::fs::create_dir_all(helper_root.join("src")).expect("mkdir helper");
+    std::fs::write(
+        helper_root.join("typst.toml"),
+        "[package]\nname = \"cv-helper\"\nversion = \"1.0.0\"\nentrypoint = \"src/lib.typ\"\n",
+    )
+    .expect("write helper manifest");
+    std::fs::write(
+        helper_root.join("src/lib.typ"),
+        "#let banner = \"HELPER-EXPORT-OK\"\n",
+    )
+    .expect("write helper lib");
+
+    // Primary: imports the helper and emits the banner alongside the
+    // resume name.
+    let primary_root = cache.path().join("packages/preview/cv-with-helper/1.0.0");
+    std::fs::create_dir_all(primary_root.join("src")).expect("mkdir primary");
+    std::fs::write(
+        primary_root.join("typst.toml"),
+        "[package]\nname = \"cv-with-helper\"\nversion = \"1.0.0\"\nentrypoint = \"src/lib.typ\"\n",
+    )
+    .expect("write primary manifest");
+    std::fs::write(
+        primary_root.join("src/lib.typ"),
+        "#import \"@preview/cv-helper:1.0.0\": banner\n\
+         #let resume = json(\"/resume.json\")\n\
+         = #resume.basics.name\n\
+         #banner\n",
+    )
+    .expect("write primary lib");
+
+    let out = cache.path().join("out.txt");
+    ferrocv()
+        .env("FERROCV_CACHE_DIR", cache.path())
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg("@preview/cv-with-helper:1.0.0")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+
+    assert!(out.exists(), "output file must exist at {}", out.display());
+    let body = std::fs::read_to_string(&out).expect("text output must be UTF-8");
+    assert!(
+        body.contains("HELPER-EXPORT-OK"),
+        "rendered text must contain the helper's exported banner; got: {body:?}"
+    );
+    assert!(
+        body.contains("Ada Lovelace"),
+        "rendered text must contain the resume name; got: {body:?}"
     );
 }
 
@@ -343,28 +427,28 @@ fn spawn_multi_route_fixture_server(routes: Vec<(String, u16, Vec<u8>)>) -> Stri
     addr
 }
 
-/// `lib.typ` body for fixture `a`. Contains a `_annotation_b` string
-/// literal that the install-time `imports.rs` scanner picks up as a
-/// transitive `@preview/b:2.0.0` reference, but does NOT use a real
-/// `#import "@preview/..."` directive — `FerrocvWorld` rejects those
-/// at render time per CONSTITUTION §6.1, and the existing
-/// `cached_preview_malicious_inline_import_is_still_rejected`
-/// regression test in this file pins that behavior down. The decoy is
-/// the smallest construct that exercises the install-time scanner
-/// without entangling with the World's render-time rejection. A
-/// minimal `#show` rule reads the JSON Resume `name` field so the
-/// renderer has something observable to emit.
+/// `lib.typ` body for fixture `a`. Issue #114 unlocked render-time
+/// resolution of `@preview/...` imports from the offline cache, so
+/// this fixture now uses a **real** `#import` rather than a
+/// string-literal decoy. The install-time `imports.rs` scanner still
+/// picks it up (it parses `#import "@preview/..."` directives, not
+/// just string literals); the render-time `FerrocvWorld` branch added
+/// in #114 resolves the import from cache once `b` has been hydrated
+/// by `themes install`. The exported `b_banner` symbol gives the
+/// scenario test something concrete to assert against.
 const A_LIB_TYP: &str = r##"// auto-generated test fixture for ferrocv recursive-install scenario
-#let _annotation_b = "@preview/b:2.0.0"
+#import "@preview/b:2.0.0": b_banner
 #let resume = json("/resume.json")
 = #resume.basics.name
+#b_banner
 "##;
 
-/// `lib.typ` body for fixture `b`: leaf, declares no further imports.
-/// `b` is never compiled at render time in this scenario — its
-/// presence in the cache is the only thing being exercised.
+/// `lib.typ` body for fixture `b`: leaf, no further imports. Exports a
+/// banner string the primary splices into the rendered output so the
+/// install → render assertion can prove the transitive import actually
+/// executed (rather than the primary having silently elided it).
 const B_LIB_TYP: &str = r##"// auto-generated test fixture for ferrocv recursive-install scenario
-= Leaf placeholder
+#let b_banner = "TRANSITIVE-INSTALL-RENDER-OK"
 "##;
 
 fn fixture_tarball_with_lib(name: &str, version: &str, lib_body: &str) -> Vec<u8> {
@@ -377,33 +461,28 @@ fn fixture_tarball_with_lib(name: &str, version: &str, lib_body: &str) -> Vec<u8
     ])
 }
 
-/// Offline `render` succeeds against the *primary* of a recursively
-/// installed `@preview/...` package. Proves what issue #102 actually
-/// delivers: install populates the cache with the primary AND its
-/// transitives via the network-permitted entry point, and then
-/// `render` can find the primary in the offline cache and compile it
-/// without re-fetching.
+/// Offline `render` succeeds against a recursively installed primary
+/// that imports a transitive helper at render time. Issue #114 broadened
+/// the user-facing benefit of recursive install: the install step
+/// hydrates primary + transitives in one network-permitted invocation,
+/// and the render-time World resolves the real `@preview/...` import
+/// from cache — no re-fetch, no separate user step per dep.
 ///
-/// **Scope intentionally narrow.** This does NOT prove that render-time
-/// `#import "@preview/<name>:<version>"` from theme source resolves
-/// out of the cache — that path is still rejected by `FerrocvWorld`
-/// per CONSTITUTION §6.1, and the
-/// `cached_preview_malicious_inline_import_is_still_rejected` test
-/// elsewhere in this file is the regression for that rejection. The
-/// transitive package (`b`) is referenced only as a string-literal
-/// decoy so the install-time scanner picks it up; it is never compiled
-/// against at render time. The user-facing benefit of recursive install
-/// is therefore one-shot cache hydration plus future-proofing, not
-/// chained imports at compile time.
+/// The fixture `a` does a **real** `#import "@preview/b:2.0.0": b_banner`
+/// (post-#114, no longer a string-literal decoy) and emits `b_banner`
+/// inline. The assertion proves both the cache hydration **and** the
+/// render-time import resolution: if either failed, the banner would be
+/// absent from the rendered text.
 ///
 /// Two phases:
 ///
 /// 1. `ferrocv themes install @preview/a:1.0.0` against a multi-route
 ///    fixture server. Exits 0; both `a` and `b` cached on disk.
 /// 2. `ferrocv render --theme @preview/a:1.0.0` with NO registry
-///    pointer set. Must succeed using only the local cache.
+///    pointer set. Must succeed using only the local cache, with the
+///    rendered text containing the helper's exported banner.
 #[test]
-fn render_against_recursively_installed_primary_works_offline() {
+fn render_against_recursively_installed_primary_uses_real_import() {
     let _guard = env_lock().lock().unwrap_or_else(|p| p.into_inner());
     let cache_dir = tempfile::TempDir::new().expect("temp cache");
 
@@ -467,8 +546,8 @@ fn render_against_recursively_installed_primary_works_offline() {
     );
     let body = std::fs::read_to_string(&out).expect("text output must be UTF-8");
     assert!(
-        !body.is_empty(),
-        "offline render output must be non-empty; got {body:?}",
+        body.contains("TRANSITIVE-INSTALL-RENDER-OK"),
+        "render-time @preview/b:2.0.0 import must resolve from cache and surface b_banner in output; got: {body:?}",
     );
 }
 

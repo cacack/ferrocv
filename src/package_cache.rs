@@ -23,10 +23,50 @@
 
 use std::path::{Path, PathBuf};
 
+use typst::syntax::VirtualPath;
+
 use crate::install::cache::package_cache_dir;
 use crate::install::manifest::parse_manifest;
 use crate::install::spec::PackageSpec;
 use crate::theme::{OwnedTheme, ThemeResolveError};
+
+/// Map a `(PackageSpec, VirtualPath)` pair to an absolute filesystem
+/// path under the local installer cache.
+///
+/// Used by the render-time `FerrocvWorld` branch that resolves
+/// `@preview/...` imports from cache (issue #114), and unit-tested in
+/// isolation so the path-translation rules stay debuggable.
+///
+/// Returns `None` when the path cannot be constructed for any reason —
+/// either the cache root could not be resolved (e.g. `FERROCV_CACHE_DIR`
+/// is set to the empty string) or the supplied `vpath` carries a
+/// component the cache layer refuses to honor (`ParentDir`, etc.). At
+/// the World layer both shapes degrade to `FileError::Package(NotFound)`,
+/// so collapsing them here keeps the caller's match arms tight.
+///
+/// # Path-traversal defense
+///
+/// Typst normalizes virtual paths internally, so a `..` component
+/// reaching this function would be a Typst bug rather than a hostile
+/// input. We still reject anything other than `Normal` and `CurDir`
+/// components as defense-in-depth — the cache lives under the user's
+/// `~/.cache` (or `FERROCV_CACHE_DIR`) and our invariants there hold
+/// only if every render-time read stays inside the requested package
+/// directory.
+pub(crate) fn package_file_path(spec: &PackageSpec, vpath: &VirtualPath) -> Option<PathBuf> {
+    if spec.namespace != "preview" {
+        return None;
+    }
+    let cache_dir = package_cache_dir(&spec.name, &spec.version).ok()?;
+    let relative = vpath.as_rootless_path();
+    for component in relative.components() {
+        match component {
+            std::path::Component::Normal(_) | std::path::Component::CurDir => {}
+            _ => return None,
+        }
+    }
+    Some(cache_dir.join(relative))
+}
 
 /// Read every theme file in a cached package's directory tree and
 /// assemble an [`OwnedTheme`] anchored at the package's manifest
@@ -431,5 +471,78 @@ mod tests {
                 "expected PreviewCacheCorrupt; got: {err:?}",
             );
         });
+    }
+
+    #[test]
+    fn package_file_path_happy_path_joins_under_cache_dir() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        with_cache_dir(tmp.path(), || {
+            let spec = PackageSpec {
+                namespace: "preview".to_owned(),
+                name: "demo".to_owned(),
+                version: "1.2.3".to_owned(),
+            };
+            let vpath = VirtualPath::new("/src/lib.typ");
+            let path = package_file_path(&spec, &vpath)
+                .expect("path must resolve under populated cache root");
+            let expected = tmp.path().join("packages/preview/demo/1.2.3/src/lib.typ");
+            assert_eq!(path, expected);
+        });
+    }
+
+    #[test]
+    fn package_file_path_root_vpath_is_cache_dir_itself() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        with_cache_dir(tmp.path(), || {
+            let spec = PackageSpec {
+                namespace: "preview".to_owned(),
+                name: "demo".to_owned(),
+                version: "1.2.3".to_owned(),
+            };
+            let vpath = VirtualPath::new("/");
+            let path = package_file_path(&spec, &vpath)
+                .expect("root vpath must still resolve to the cache dir");
+            let expected = tmp.path().join("packages/preview/demo/1.2.3");
+            assert_eq!(path, expected);
+        });
+    }
+
+    #[test]
+    fn package_file_path_rejects_non_preview_namespace() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        with_cache_dir(tmp.path(), || {
+            let spec = PackageSpec {
+                namespace: "local".to_owned(),
+                name: "x".to_owned(),
+                version: "1.0".to_owned(),
+            };
+            let vpath = VirtualPath::new("/lib.typ");
+            assert!(
+                package_file_path(&spec, &vpath).is_none(),
+                "only @preview/ namespace is resolvable from cache",
+            );
+        });
+    }
+
+    #[test]
+    fn package_file_path_returns_none_when_cache_root_unresolved() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let _guard = EnvGuard {
+            prior: std::env::var("FERROCV_CACHE_DIR").ok(),
+        };
+        // SAFETY: serialized via ENV_LOCK above.
+        unsafe {
+            std::env::set_var("FERROCV_CACHE_DIR", "");
+        }
+        let spec = PackageSpec {
+            namespace: "preview".to_owned(),
+            name: "demo".to_owned(),
+            version: "1.0.0".to_owned(),
+        };
+        let vpath = VirtualPath::new("/lib.typ");
+        assert!(
+            package_file_path(&spec, &vpath).is_none(),
+            "empty FERROCV_CACHE_DIR must collapse to None",
+        );
     }
 }

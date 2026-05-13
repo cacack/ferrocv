@@ -56,4 +56,61 @@ mod install_feature_off {
         // nothing in this module references `ferrocv::install`, so
         // the default build cannot link against it.
     }
+
+    /// Issue #114 boundary check: even when a theme source file
+    /// contains a real `#import "@preview/..."`, the default-features
+    /// World still rejects it. The cache reader added in #114 is
+    /// `#[cfg(feature = "install")]`, so the no-install fallback
+    /// inside `resolve_package_file` preserves the historical blanket
+    /// rejection. This pins the "no network at render time" guarantee
+    /// at the *code* level (the no-network feature flag enforces it at
+    /// the *dependency* level).
+    #[test]
+    fn render_rejects_preview_imports_even_with_cache_dir_set() {
+        use assert_cmd::Command;
+        use predicates::prelude::*;
+
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        // Local-path theme with an inline `@preview/...` import.
+        let theme_path = tmp.path().join("local-theme.typ");
+        std::fs::write(
+            &theme_path,
+            "#import \"@preview/some-pkg:1.0.0\": *\n\
+             #let resume = json(\"/resume.json\")\n\
+             = #resume.basics.name\n",
+        )
+        .expect("write theme");
+
+        // Minimal valid resume.
+        let resume_path = tmp.path().join("resume.json");
+        std::fs::write(
+            &resume_path,
+            "{\"basics\":{\"name\":\"Test\"},\"$schema\":\"https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json\"}",
+        )
+        .expect("write resume");
+
+        let out = tmp.path().join("out.pdf");
+        Command::cargo_bin("ferrocv")
+            .expect("ferrocv binary")
+            // Even setting FERROCV_CACHE_DIR has no effect under
+            // default features — the cache reader is not linked.
+            .env("FERROCV_CACHE_DIR", tmp.path())
+            .arg("render")
+            .arg(&resume_path)
+            .arg("--theme")
+            .arg(&theme_path)
+            .arg("--format")
+            .arg("pdf")
+            .arg("--output")
+            .arg(&out)
+            .assert()
+            .code(2)
+            .stderr(predicate::str::contains("@preview/some-pkg:1.0.0"))
+            .stderr(predicate::str::contains("package not found"));
+
+        assert!(
+            !out.exists(),
+            "default build must not produce output when theme imports @preview/...",
+        );
+    }
 }

@@ -85,13 +85,19 @@ them requires a constitutional amendment, not a feature PR.
   `ferrocv render` and `ferrocv validate` are fully offline. Themes
   ship vendored in-tree (`assets/themes/`) and are baked into the
   binary; the JSON Resume schema is vendored the same way. The
-  embedded Typst `World` actively rejects any `@preview/...` package
-  import rather than fetching it — this rejection is hard and is not
-  relaxed by any feature flag or subcommand. Rendering may read from
-  the local installer cache populated by a prior
-  `ferrocv themes install` (see next bullet); that is a local
-  filesystem read, not a network call, and does not weaken the
-  `render`-is-offline guarantee.
+  embedded Typst `World` never fetches a `@preview/...` package; on
+  cache miss it rejects the import with a structured "package not
+  found" diagnostic. Rendering may read from the local installer cache
+  populated by a prior `ferrocv themes install` (see next bullet); that
+  is a local filesystem read, not a network call, and does not weaken
+  the `render`-is-offline guarantee. The cache-read allowance covers
+  both the primary spec resolved at the CLI boundary and any
+  `@preview/...` imports the Typst World resolves on a cached
+  package's behalf at compile time — a same-class extension of the
+  same local-filesystem-read principle, gated behind the same
+  `install` Cargo feature. Default-features builds do not include the
+  cache reader at all and keep the historical blanket rejection of
+  every `@preview/...` import.
 - **`ferrocv themes install` is the single, enumerated network-permitted
   entry point.** It is an explicit, user-initiated subcommand that
   fetches only from the Typst Universe `@preview` registry over HTTPS
