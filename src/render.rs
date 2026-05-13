@@ -918,6 +918,22 @@ fn resolve_package_file(
     if !cache_dir.is_dir() {
         return Err(FileError::Package(PackageError::NotFound(spec.clone())));
     }
+    // Reject symlinks at the read site to match the defensive posture
+    // of `package_cache::collect_typ_files` and the imports scanner.
+    // `tar::Archive::unpack` does not normally extract symlinks, but a
+    // corrupted cache or a local edit could introduce one; following it
+    // would let a render-time read escape the cache root. Use
+    // `symlink_metadata` so the lookup itself does not traverse.
+    match std::fs::symlink_metadata(&fs_path) {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            return Err(FileError::NotFound(vpath.as_rootless_path().into()));
+        }
+        Ok(_) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(FileError::NotFound(vpath.as_rootless_path().into()));
+        }
+        Err(err) => return Err(FileError::from_io(err, &fs_path)),
+    }
     std::fs::read(&fs_path).map_err(|err| FileError::from_io(err, &fs_path))
 }
 

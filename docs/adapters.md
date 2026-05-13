@@ -137,10 +137,13 @@ didn't change.
 
 ## Step-by-step: adding a new adapter
 
-This walkthrough is the **vendored adapter** path — the only adapter
-shape contributors author today. See "Two ways to use a Typst Universe
-template" above for why install-based passthrough is a runtime
-feature, not a contributor pattern.
+This walkthrough is the **vendored adapter** path — recommended for
+any adapter that needs to be available in default builds, and the
+shape every existing adapter in the repo follows. The in-tree shim
+adapter shape (the third column in "Two ways to use a Typst Universe
+template" above) is a thinner alternative when `--features install`
+availability is acceptable; the differences are noted inline where
+they matter.
 
 ### 1. Vet the upstream
 
@@ -153,10 +156,15 @@ Before vendoring anything:
   see `assets/themes/fantastic-cv/VENDORING.md`), prefer the actual
   `LICENSE` file's text and document the discrepancy.
 - **Network audit.** Grep the upstream source for `@preview/` and any
-  `import` of an external package. Each match is a patch you'll have
-  to write and maintain (CONSTITUTION §6.1: no network calls at render
-  time; the World rejects every `PackageSpec`). A handful is fine; a
-  pervasive icon library is a maintenance burden.
+  `import` of an external package. For a **vendored adapter** each
+  match is a patch you'll have to write and maintain — vendored themes
+  are baked in at compile time and never run through `themes install`,
+  so the World's cache lookup misses and rejects every package import
+  (CONSTITUTION §6.1). For an **in-tree shim adapter** these imports
+  are the whole point; they resolve at render time once the user runs
+  `themes install`. A handful is fine either way; a pervasive icon
+  library is a maintenance burden in the vendored shape and a setup
+  burden in the shim shape.
 - **Wall-clock audit.** Grep for `datetime.today(`. The World's
   `today()` returns `None` for reproducibility (see `src/render.rs`),
   so any default that calls `datetime.today().display(...)` will panic
