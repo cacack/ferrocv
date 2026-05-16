@@ -10,9 +10,9 @@ documents to PDF, HTML, and plain text via [Typst](https://typst.app/),
 embedded in-process via the `typst` crate.
 
 PDF, plain-text, and HTML rendering all work today (released as v0.3.0).
-The phased roadmap now lives in [GitHub
-issues](https://github.com/cacack/ferrocv/issues); `TODO.md` holds only
-unresolved design questions. `README.md` is the user-facing entrypoint.
+The phased roadmap and unresolved design questions live in [GitHub
+issues](https://github.com/cacack/ferrocv/issues). `README.md` is the
+user-facing entrypoint.
 
 ## Commands
 

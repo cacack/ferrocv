@@ -1,7 +1,8 @@
 # Constitution
 
 The non-negotiables for `ferrocv`. This document answers **what** we're
-building and **why**. *How* lives in the code and `TODO.md`.
+building and **why**. *How* lives in the code and [GitHub
+issues](https://github.com/cacack/ferrocv/issues).
 
 Amendments require a PR that updates this file and explains the
 reasoning in the commit message. Everything else (style, structure,
