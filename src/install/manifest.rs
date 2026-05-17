@@ -34,12 +34,14 @@ pub struct Manifest {
 
 /// Parse a `typst.toml` string into a [`Manifest`].
 pub fn parse_manifest(toml_str: &str) -> Result<Manifest, InstallError> {
+    // toml 1.x removed `FromStr for toml::Value` as a document parser
+    // (it now parses a single value), so we go through `toml::from_str`
+    // which keeps document semantics — accepting leading whitespace and
+    // multiple top-level tables the way 0.8 did.
     let value: toml::Value =
-        toml_str
-            .parse()
-            .map_err(|e: toml::de::Error| InstallError::ManifestParse {
-                reason: e.to_string(),
-            })?;
+        toml::from_str(toml_str).map_err(|e: toml::de::Error| InstallError::ManifestParse {
+            reason: e.to_string(),
+        })?;
 
     let package = value
         .get("package")
