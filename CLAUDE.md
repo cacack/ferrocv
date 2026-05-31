@@ -9,11 +9,12 @@ in this repository.
 documents to PDF, HTML, and plain text via [Typst](https://typst.app/),
 embedded in-process via the `typst` crate.
 
-PDF, plain-text, and HTML rendering all work today (released as v0.3.0).
-The differentiating capability — **targeted projection** (maintain one
-master `resume.json`, emit audience-specific cuts; CONSTITUTION §7) — is
-the v0.4.0 headline and not yet built. The roadmap and unresolved design
-questions live in [GitHub
+PDF, plain-text, and HTML rendering all ship today (current release
+v0.6.0). The differentiating capability — **targeted projection**
+(maintain one master `resume.json`, emit audience-specific cuts;
+CONSTITUTION §7) — is the next headline feature, tracked under the
+`v0.8.0` milestone, and not yet built. The roadmap and unresolved
+design questions live in [GitHub
 issues](https://github.com/cacack/ferrocv/issues). `README.md` is the
 user-facing entrypoint.
 
