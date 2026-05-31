@@ -142,6 +142,42 @@ pitch is also the security story — fewer moving parts, less
 attack surface, nothing phoning home. Making trust explicit keeps us
 from quietly trading it away for convenience later.
 
+### 7. Targeted projection from a single master
+
+The point of `ferrocv` is not only to render a resume — it is to let a
+user maintain **one comprehensive master `resume.json`** (every role,
+every highlight; 5+ pages printed in full) and emit **targeted,
+audience-specific cuts** from it: a focused two-page document that is a
+*subset/projection* of the master, never a separately maintained file.
+
+- **Projection is a distinct stage upstream of rendering.** It takes
+  the master document plus a selection spec and produces a **derived
+  document that is itself still valid JSON Resume**, which then flows
+  into the existing render pipeline unchanged. The master is consumed
+  unmodified (§1); projection is an additive transform that emits a
+  valid JSON Resume subset, not a schema fork.
+- **Two layers of selection.** *Mechanical* — drop roles before a date,
+  cap highlights per role, redact PII. *Curated* — select content by
+  audience tags carried under `x-` fields (§1's extension mechanism),
+  so "the security cut" keeps the highlights tagged for it rather than
+  the first N by position. Curated selection is the headline; mechanical
+  selection is the cheap complement.
+- **Selection lives in Rust, never in themes.** The projection stage
+  preprocesses the document; themes receive an already-narrowed valid
+  JSON Resume and stay ignorant of audiences and filters. This keeps
+  the theme contract simple (§5) and the layers separable (§4).
+- **Projection selects and omits; it never rewrites or generates.** We
+  do not reword bullets, summarize, or invent content — that would make
+  this an authoring tool and require the LLM calls §6 rules out. The
+  user writes the master; `ferrocv` chooses what to show.
+
+- **Why:** plenty of tools render a JSON Resume to PDF — that capability
+  is a commodity and not, by itself, a reason for `ferrocv` to exist.
+  Maintaining a single source of truth and generating tailored cuts per
+  application is the differentiating value. A data model built around
+  "one document in, one document out" would quietly foreclose it, so we
+  state it as a principle rather than discover it as a retrofit.
+
 ## Non-goals
 
 These are deliberately out of scope. Proposals to add them belong in an
@@ -152,6 +188,9 @@ amendment PR, not a feature PR.
   HR-XML, etc.).
 - Becoming a general-purpose Typst build tool.
 - Shipping a hosted service, web UI, or SaaS wrapper.
+- Authoring or rewriting resume content. Projection (§7) selects and
+  omits from a master the user wrote; it does not generate, summarize,
+  or reword bullets, and it does not auto-fit content to a page count.
 
 ## Testing doctrine
 
