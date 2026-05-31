@@ -87,6 +87,14 @@ jobs:
     # Uses taiki-e/install-action (prebuilt binary) instead of
     # rustsec/audit-check, which compiles cargo-audit from source
     # on every run (~3min vs ~20s).
+    #
+    # Trust-vs-speed tradeoff evaluated and decided in #21: stay on
+    # taiki-e/install-action. It's a personal account, but already
+    # load-bearing in fuzz.yml, and Swatinem/rust-cache (same trust
+    # class) is already used in clippy/test/verify-no-network-default —
+    # so switching only this job would cost speed without shrinking the
+    # trust surface. SHA-pinning + Dependabot is the mitigation. Revisit
+    # if taiki-e/install-action has a security or maintenance incident.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - id: detect
