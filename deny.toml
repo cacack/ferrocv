@@ -16,7 +16,8 @@ ignore = [
     # paste 1.0.15 unmaintained; transitive: typst → typst-library → hayagriva → paste.
     { id = "RUSTSEC-2024-0436", reason = "transitive via typst → hayagriva; upstream typst/hayagriva to drop" },
     # yaml-rust 0.4.5 unmaintained; transitive: typst → typst-library → syntect → yaml-rust.
-    { id = "RUSTSEC-2024-0320", reason = "transitive via typst → syntect; upstream syntect to migrate to yaml-rust2" },
+    # Tracked in #154 — drop this entry once syntect migrates to yaml-rust2.
+    { id = "RUSTSEC-2024-0320", reason = "transitive via typst → syntect; upstream syntect to migrate to yaml-rust2 (#154)" },
 ]
 
 [licenses]
