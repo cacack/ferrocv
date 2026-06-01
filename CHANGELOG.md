@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/cacack/ferrocv/compare/v0.6.0...v0.7.0) (2026-06-01)
+
+
+### Features
+
+* **render:** resolve cached @preview/... imports from theme source ([2a7c71e](https://github.com/cacack/ferrocv/commit/2a7c71e2da55b5e6bded7aac1685356e11b236af))
+
 ## [0.6.0](https://github.com/cacack/ferrocv/compare/v0.5.0...v0.6.0) (2026-05-11)
 
 
