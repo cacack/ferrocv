@@ -1,5 +1,6 @@
 /target
 /dist
+/lcov.info
 Cargo.lock.bak
 .prompts
 .claude/settings.local.json

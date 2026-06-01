@@ -1,5 +1,5 @@
 .PHONY: help \
-        preflight fmt-check fmt clippy test deny audit typos \
+        preflight fmt-check fmt clippy test deny audit typos coverage \
         build build-release check clean doc install \
         install-tools verify-no-network-default \
         fuzz fuzz-parse fuzz-validate
@@ -63,6 +63,24 @@ audit: ## cargo-audit (CI parity)
 typos: ## typos check (CI parity)
 	typos
 
+# --- Coverage (not part of preflight: instrumented build is slow) -------------
+#
+# Coverage is informational, not a fine-grained merge gate (issue #18;
+# CONSTITUTION testing doctrine). Codecov reports per-component coverage
+# (see codecov.yml); the only hard gate is the coarse soft floor below,
+# which fails CI only on a large drop.
+#
+# COVERAGE_MIN is the soft floor (% lines). Baseline at introduction was
+# 85.67% total lines (cargo-llvm-cov, --all-features --workspace); the floor
+# sits ~10pp below so routine churn doesn't trip it. Raise it deliberately if
+# coverage climbs and you want to lock in the gain.
+COVERAGE_MIN ?= 75
+
+coverage: ## cargo-llvm-cov: write lcov.info + enforce soft floor (informational)
+	cargo llvm-cov --all-features --workspace --no-report
+	cargo llvm-cov report --lcov --output-path lcov.info
+	cargo llvm-cov report --fail-under-lines $(COVERAGE_MIN)
+
 # --- Fuzzing (nightly-only; not part of preflight) ---------------------------
 
 fuzz-parse: ## Run cargo-fuzz parse target for 60s (nightly required)
@@ -95,5 +113,6 @@ install: ## Install ferrocv binary from this checkout
 
 # --- Tooling -----------------------------------------------------------------
 
-install-tools: ## Install cargo-deny, cargo-audit, typos-cli
-	cargo install --locked cargo-deny cargo-audit typos-cli
+install-tools: ## Install cargo-deny, cargo-audit, typos-cli, cargo-llvm-cov
+	cargo install --locked cargo-deny cargo-audit typos-cli cargo-llvm-cov
+	rustup component add llvm-tools-preview

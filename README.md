@@ -1,6 +1,7 @@
 # ferrocv
 
 [![CI](https://github.com/cacack/ferrocv/actions/workflows/ci.yml/badge.svg)](https://github.com/cacack/ferrocv/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/cacack/ferrocv/branch/main/graph/badge.svg)](https://codecov.io/gh/cacack/ferrocv)
 [![CodeQL](https://github.com/cacack/ferrocv/actions/workflows/codeql.yml/badge.svg)](https://github.com/cacack/ferrocv/actions/workflows/codeql.yml)
 [![crates.io](https://img.shields.io/crates/v/ferrocv.svg)](https://crates.io/crates/ferrocv)
 [![docs.rs](https://img.shields.io/docsrs/ferrocv)](https://docs.rs/ferrocv)
@@ -215,6 +216,16 @@ First-time setup installs the non-cargo-stock tools:
 
 ```sh
 make install-tools
+```
+
+Test coverage is tracked with `cargo-llvm-cov` and uploaded to
+[Codecov](https://codecov.io/gh/cacack/ferrocv). Coverage is informational
+(it never blocks a PR); `make coverage` enforces only a coarse soft floor
+that fails on a large drop. It is kept out of `make preflight` because the
+instrumented build is slow.
+
+```sh
+make coverage
 ```
 
 ## Non-goals

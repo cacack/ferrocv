@@ -1,0 +1,66 @@
+# Codecov configuration — https://docs.codecov.com/docs/codecovyml-reference
+#
+# Coverage is informational, not a merge gate (issue #18; CONSTITUTION
+# testing doctrine: "coverage percentages are not a goal"). Codecov posts
+# per-component breakdowns and PR comments but never blocks a PR. The only
+# hard coverage gate lives in CI as a coarse soft floor (`make coverage`'s
+# `--fail-under-lines`), which fails only on a large drop.
+#
+# This is the Rust/Codecov translation of the sibling `my-family` repo's
+# `.testcoverage.yml` per-package-threshold-with-documented-overrides pattern.
+# ferrocv is a single crate (the `fuzz/` package is a separate workspace), so
+# "per-package" maps to per-source-area Codecov components below.
+
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        # Tolerate a 2% dip so new features with hard-to-cover paths
+        # (network, Typst compile errors) don't light up red.
+        threshold: 2%
+        informational: true
+    patch:
+      default:
+        informational: true
+
+# Per-source-area components. Each is the analogue of a `.testcoverage.yml`
+# `override:` entry; lower-coverage areas are documented inline rather than
+# hidden inside one global number. All are informational (see `coverage`
+# above) — these set expectations and group the report, they do not gate.
+component_management:
+  individual_components:
+    # Core in-process Typst compilation (PDF/text/HTML exporters).
+    - component_id: render
+      paths:
+        - src/render.rs
+    # Theme registry + `--theme` resolution (bundled / local / @preview).
+    - component_id: theme
+      paths:
+        - src/theme.rs
+    # Schema validation against the vendored JSON Resume schema.
+    - component_id: validate
+      paths:
+        - src/validate.rs
+    # CLI surface. Mostly arg parsing + dispatch glue, so a chunk is
+    # exercised only through the spawn-the-binary scenario tests; expect a
+    # lower line ratio here than in the library modules.
+    - component_id: cli
+      paths:
+        - src/cli.rs
+    # `themes install` network pipeline (feature-gated). Many error paths
+    # (HTTP failures, malformed tarballs) are hard to unit-cover without a
+    # live registry, so this area is expected to trend lower.
+    - component_id: install
+      paths:
+        - src/install/**
+        - src/package_cache.rs
+
+# Exclude code that does not need coverage tracking.
+ignore:
+  - "fuzz/**"   # separate workspace; fuzz harnesses, not unit-under-test
+  - "tests/**"  # the tests themselves
+
+comment:
+  layout: "reach,diff,components"
+  require_changes: true
