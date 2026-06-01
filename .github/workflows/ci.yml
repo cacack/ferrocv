@@ -129,13 +129,48 @@ jobs:
       - if: steps.detect.outputs.has_cargo == 'true'
         run: make verify-no-network-default
 
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: detect
+        run: echo "has_cargo=$([ -f Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.detect.outputs.has_cargo == 'true'
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # stable
+        with:
+          toolchain: stable
+          components: llvm-tools-preview
+      - if: steps.detect.outputs.has_cargo == 'true'
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - if: steps.detect.outputs.has_cargo == 'true'
+        uses: taiki-e/install-action@60ae4ce63c7aeb6e96d7f572c1ec7fafbb17ca80 # v2.79.10
+        with:
+          tool: cargo-llvm-cov
+      # `make coverage` is the CI-parity entry point: it generates lcov.info
+      # and enforces the coarse soft floor (--fail-under-lines). The floor is
+      # the only hard coverage gate; the Codecov upload below is informational.
+      - if: steps.detect.outputs.has_cargo == 'true'
+        run: make coverage
+      # Upload is non-blocking: a missing CODECOV_TOKEN or a Codecov outage
+      # must not turn CI red (fail_ci_if_error: false). Coverage is
+      # informational per issue #18; the soft floor in `make coverage` above
+      # is what gates.
+      - if: steps.detect.outputs.has_cargo == 'true'
+        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
   # Aggregator gate: branch protection targets this single check instead of
   # each upstream job. Add new jobs to `needs:` as they land.
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [fmt, clippy, test, deny, audit, typos, verify-no-network-default]
+    needs: [fmt, clippy, test, deny, audit, typos, verify-no-network-default, coverage]
     if: always()
     steps:
       - name: Check all jobs passed

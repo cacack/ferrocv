@@ -27,7 +27,11 @@ strings there are kept in lockstep with `.github/workflows/ci.yml`.
   deny, audit, typos). Run before pushing.
 - `make test` / `make clippy` / `make fmt` — individual targets.
 - `make install-tools` — first-time install of the non-stock tools
-  (`cargo-deny`, `cargo-audit`, `typos-cli`).
+  (`cargo-deny`, `cargo-audit`, `typos-cli`, `cargo-llvm-cov`).
+- `make coverage` — `cargo-llvm-cov` line coverage; writes `lcov.info`
+  and enforces a coarse soft floor. Informational (uploaded to Codecov,
+  never a merge gate); kept out of `preflight` as the instrumented build
+  is slow.
 - `make fuzz` / `make fuzz-parse` / `make fuzz-validate` —
   local cargo-fuzz smoke (60s per target, nightly Rust required).
   Nightly CI runs these for 120s each; see
