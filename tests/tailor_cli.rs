@@ -292,6 +292,21 @@ fn tailor_rejects_malformed_since() {
 }
 
 #[test]
+fn tailor_malformed_since_beats_invalid_master() {
+    // A malformed projection flag is a usage error (exit 2) and must win
+    // over a schema-invalid master (exit 1): bad CLI input is rejected
+    // before the document is even validated.
+    ferrocv()
+        .arg("tailor")
+        .arg(fixture("invalid_wrong_type_email"))
+        .arg("--since")
+        .arg("banana")
+        .assert()
+        .code(2)
+        .stdout(predicate::str::is_empty());
+}
+
+#[test]
 fn tailor_rejects_unknown_redact_value() {
     // --redact is a fixed vocabulary (clap ValueEnum); an unknown value
     // is a clap usage error (exit 2).

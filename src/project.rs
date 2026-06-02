@@ -81,6 +81,23 @@ impl ProjectionSpec {
     pub fn is_noop(&self) -> bool {
         *self == ProjectionSpec::default()
     }
+
+    /// Validate the spec's flag values without touching a document.
+    ///
+    /// Currently this just checks that `since` (if set) is a usable ISO
+    /// 8601 date. Callers should run this *before* reading or validating
+    /// the input document, so a malformed flag value surfaces as a usage
+    /// error rather than being masked by an unrelated schema failure in
+    /// the document. [`project`] also calls it, so the guarantee holds
+    /// even for callers that skip the early check.
+    pub fn validate(&self) -> Result<(), ProjectionError> {
+        if let Some(since) = &self.since
+            && !is_iso_date(since)
+        {
+            return Err(ProjectionError::InvalidSince(since.clone()));
+        }
+        Ok(())
+    }
 }
 
 /// An error from [`project`].
@@ -117,13 +134,11 @@ impl std::error::Error for ProjectionError {}
 /// not a valid ISO 8601 date; the document is validated for that before
 /// any work is done.
 pub fn project(doc: &Value, spec: &ProjectionSpec) -> Result<Value, ProjectionError> {
-    // Validate the one fallible input up front, before cloning, so a bad
-    // spec is cheap to reject.
-    if let Some(since) = &spec.since
-        && !is_iso_date(since)
-    {
-        return Err(ProjectionError::InvalidSince(since.clone()));
-    }
+    // Validate the spec up front, before cloning, so a bad flag value is
+    // cheap to reject. Callers are encouraged to call `validate()` even
+    // earlier (before reading the document) so usage errors win over
+    // document errors; this call keeps the guarantee for those that don't.
+    spec.validate()?;
 
     let mut out = doc.clone();
 
@@ -237,11 +252,12 @@ fn is_iso_date(s: &str) -> bool {
 /// `YYYY-MM-DD` string, filling absent month/day components per `bound`.
 ///
 /// Returns `None` for anything that is not `YYYY`, `YYYY-MM`, or
-/// `YYYY-MM-DD` with all-digit, correctly-zero-padded components and a
-/// month in `01`–`12` / day in `01`–`31`. The range check is coarse — it
-/// is not a full calendar check, so `2020-02-31` (a non-existent day that
-/// is still within `01`–`31`) is accepted; it exists to reject obvious
-/// garbage like `2020-13` while keeping the implementation simple.
+/// `YYYY-MM-DD` with all-digit, correctly-zero-padded components, a month
+/// in `01`–`12`, and — when a day is present — a day that actually exists
+/// in that month and year (leap years included). So `2020-13`,
+/// `2020-02-31`, and `2021-02-29` are all rejected, while `2020-02-29` is
+/// accepted. This is a real calendar check, not just a range bound, so
+/// the CLI's "a malformed value is a usage error" promise holds.
 fn normalize_date(s: &str, bound: Bound) -> Option<String> {
     let parts: Vec<&str> = s.split('-').collect();
     let widths = [4usize, 2, 2];
@@ -254,17 +270,18 @@ fn normalize_date(s: &str, bound: Bound) -> Option<String> {
             return None;
         }
     }
-    // Range-check the present month/day components.
+    let year: u16 = parts[0].parse().ok()?;
+    // Range-check the present month/day components against the calendar.
     if let Some(month) = parts.get(1) {
         let month: u8 = month.parse().ok()?;
         if !(1..=12).contains(&month) {
             return None;
         }
-    }
-    if let Some(day) = parts.get(2) {
-        let day: u8 = day.parse().ok()?;
-        if !(1..=31).contains(&day) {
-            return None;
+        if let Some(day) = parts.get(2) {
+            let day: u8 = day.parse().ok()?;
+            if !(1..=days_in_month(year, month)).contains(&day) {
+                return None;
+            }
         }
     }
 
@@ -276,6 +293,21 @@ fn normalize_date(s: &str, bound: Bound) -> Option<String> {
     let month = parts.get(1).copied().unwrap_or(fill_month);
     let day = parts.get(2).copied().unwrap_or(fill_day);
     Some(format!("{year}-{month}-{day}"))
+}
+
+/// Number of days in a given (Gregorian) month, leap years included.
+///
+/// `month` must already be range-checked to `1..=12` by the caller.
+fn days_in_month(year: u16, month: u8) -> u8 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400) => {
+            29
+        }
+        2 => 28,
+        _ => unreachable!("month is range-checked to 1..=12 before this call"),
+    }
 }
 
 #[cfg(test)]
@@ -477,6 +509,19 @@ mod tests {
         assert!(!is_iso_date("2020-00"));
         assert!(!is_iso_date("2020-05-32"));
         assert!(!is_iso_date("2020-05-00"));
+    }
+
+    #[test]
+    fn is_iso_date_enforces_real_calendar_days() {
+        // Impossible days for the given month/year are rejected...
+        assert!(!is_iso_date("2020-02-31"), "Feb never has 31 days");
+        assert!(!is_iso_date("2021-02-29"), "2021 is not a leap year");
+        assert!(!is_iso_date("2020-04-31"), "April has 30 days");
+        // ...while genuine dates, including leap day, are accepted.
+        assert!(is_iso_date("2020-02-29"), "2020 is a leap year");
+        assert!(is_iso_date("2000-02-29"), "2000 is a leap year (÷400)");
+        assert!(!is_iso_date("1900-02-29"), "1900 is not a leap year (÷100)");
+        assert!(is_iso_date("2021-04-30"));
     }
 
     #[test]

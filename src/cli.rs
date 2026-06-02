@@ -546,6 +546,15 @@ fn run_render(
     output: Option<&Path>,
     projection: &ProjectionSpec,
 ) -> Result<ExitCode> {
+    // Step 0: validate projection flags before touching the document, so
+    // a malformed flag value (e.g. `--since banana`) is a usage error
+    // (exit 2) and wins deterministically over an unrelated schema
+    // failure in the input (exit 1).
+    if let Err(err) = projection.validate() {
+        eprintln!("error: {err}; no output written");
+        return Ok(ExitCode::from(2));
+    }
+
     // Step 1: resolve theme name first. Every format now has a default
     // (`text-minimal` for PDF/text, `html-minimal` for HTML), so this
     // is infallible — an explicit `--theme` overrides, otherwise the
@@ -682,6 +691,15 @@ fn run_tailor(
     spec: &ProjectionSpec,
     output: Option<&Path>,
 ) -> Result<ExitCode> {
+    // Step 0: validate projection flags before touching the document, so
+    // a malformed flag value (e.g. `--since banana`) is a usage error
+    // (exit 2) rather than being masked by a schema failure (exit 1) in
+    // the master.
+    if let Err(err) = spec.validate() {
+        eprintln!("error: {err}; no output written");
+        return Ok(ExitCode::from(2));
+    }
+
     // Step 1: read input (IO errors → exit 2 via main's anyhow mapping).
     let input = read_input(path)?;
 

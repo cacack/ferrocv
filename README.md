@@ -80,7 +80,7 @@ ferrocv themes list
 ferrocv tailor master.json --since 2015 --max-bullets 4 --redact pii -o cut.json
 
 # Same filters straight to a rendered PDF — no intermediate file
-ferrocv render master.json --since 2015 --max-bullets 4 --theme typst-jsonresume-cv
+ferrocv render master.json --since 2015 --max-bullets 4 --redact pii --theme typst-jsonresume-cv
 ```
 
 The quickest way to try it end-to-end is
