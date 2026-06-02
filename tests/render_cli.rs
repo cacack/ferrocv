@@ -915,3 +915,87 @@ fn render_with_preview_spec_exits_two_with_install_hint() {
         "no output file should be written on uncached preview spec"
     );
 }
+
+// --- Projection flags on `render` (issue #148) ---------------------
+//
+// `render` gains the same mechanical projection flags as `tailor`, over
+// the shared transform (ADR 0005). These assert the flags are accepted
+// and produce output; the per-filter semantics are covered structurally
+// in `tests/tailor_cli.rs` against the same transform.
+
+#[test]
+fn render_with_since_flag_succeeds() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("master_projection"))
+        .arg("--since")
+        .arg("2015")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success();
+    assert!(out.exists(), "projected render writes output");
+    let text = std::fs::read_to_string(&out).expect("read output");
+    assert!(
+        !text.contains("Old Corp"),
+        "the --since-dropped role must not appear in rendered output"
+    );
+}
+
+#[test]
+fn render_with_max_bullets_and_redact_succeeds() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("master_projection"))
+        .arg("--max-bullets")
+        .arg("1")
+        .arg("--redact")
+        .arg("pii")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success();
+    assert!(out.exists(), "projected render writes output");
+    // Assert the flags actually took effect in the rendered output, not
+    // just that a file appeared (a no-op projection would still write).
+    let text = std::fs::read_to_string(&out).expect("read output");
+    // --redact pii: contact fields gone from the rendered document.
+    assert!(!text.contains("grace@example.com"), "email redacted");
+    assert!(!text.contains("555-0100"), "phone redacted");
+    // --max-bullets 1: the first bullet survives, the second is dropped.
+    assert!(
+        text.contains("Led the platform rewrite"),
+        "first bullet kept"
+    );
+    assert!(
+        !text.contains("Mentored eight engineers"),
+        "second bullet dropped by --max-bullets 1"
+    );
+}
+
+#[test]
+fn render_without_projection_flags_is_unchanged() {
+    // No projection flags ⇒ projection stage is inert; render behaves
+    // exactly as it does on any input.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("master_projection"))
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success();
+    let text = std::fs::read_to_string(&out).expect("read output");
+    assert!(text.contains("Old Corp"), "no flags ⇒ nothing dropped");
+}

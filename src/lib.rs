@@ -6,12 +6,14 @@ pub mod cli;
 pub mod install;
 #[cfg(feature = "install")]
 pub mod package_cache;
+pub mod project;
 pub mod render;
 #[cfg(test)]
 mod test_env;
 pub mod theme;
 pub mod validate;
 
+pub use project::{ProjectionError, ProjectionSpec, RedactSet, project};
 pub use render::{
     RenderDiagnostic, RenderError, compile_html, compile_html_resolved, compile_pdf, compile_text,
     compile_text_resolved, compile_theme, compile_theme_resolved,

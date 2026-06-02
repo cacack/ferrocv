@@ -73,6 +73,14 @@ ferrocv render resume.json --format html
 
 # List bundled themes (machine-readable, one name per line)
 ferrocv themes list
+
+# Project a master resume into a narrower cut (mechanical filters):
+# drop roles that ended before 2015, cap each job at 4 bullets, and
+# strip PII. Writes the derived JSON Resume to stdout (or use -o).
+ferrocv tailor master.json --since 2015 --max-bullets 4 --redact pii -o cut.json
+
+# Same filters straight to a rendered PDF — no intermediate file
+ferrocv render master.json --since 2015 --max-bullets 4 --redact pii --theme typst-jsonresume-cv
 ```
 
 The quickest way to try it end-to-end is
@@ -86,8 +94,42 @@ format: PDF and text default to the native `text-minimal` theme, while
 HTML defaults to the native `html-minimal` semantic theme. When
 `--output` is omitted, the output lands at `dist/resume.pdf` for PDF,
 `dist/resume.txt` for text, and `dist/resume.html` for HTML; parent
-directories are created as needed. `validate` and `render` read from
-stdin if no path is given.
+directories are created as needed. `validate`, `render`, and `tailor`
+read from stdin if no path is given.
+
+### Projection: one master, many cuts
+
+The point of ferrocv is to maintain **one comprehensive master
+`resume.json`** and emit **targeted, audience-specific cuts** from it
+(CONSTITUTION §7). Projection is a stage *upstream* of rendering: it
+reads the master unmodified and produces a derived document that is
+itself valid JSON Resume, which flows into the normal render pipeline.
+
+`ferrocv tailor` runs that stage and stops, emitting the derived
+document so you can inspect, commit, or pipe it. The same flags are
+also available on `render`, which projects then renders in one shot —
+so `ferrocv render master.json --since 2015` is equivalent to
+`ferrocv tailor master.json --since 2015 | ferrocv render`.
+
+The **mechanical** filters (theme-agnostic, available today):
+
+- `--since <YYYY|YYYY-MM|YYYY-MM-DD>` — drop `work` entries that ended
+  before the cutoff. Ongoing roles (no `endDate`) are always kept.
+- `--max-bullets <N>` — cap every `highlights` list at the first N
+  bullets.
+- `--redact pii` — remove `basics.location`, `basics.phone`, and
+  `basics.email` from the cut. Identity fields (`name`, `label`,
+  `summary`, `url`, `profiles`) are kept.
+
+With no projection flags, `render` behaves exactly as it does on any
+input — projection is opt-in and inert by default. Curated,
+audience-tag-driven selection (`--audience`) is in progress.
+
+`tailor` writes the derived document to `--output <file>`, or to stdout
+when `--output` is omitted, so it composes in a pipe; all diagnostics
+go to stderr. Note that stdout-by-default prints the full resume,
+including any PII not removed by `--redact` — prefer `--output <file>`
+for unattended or shared/recorded contexts.
 
 `themes list` prints registered theme names to stdout, one per line,
 sorted lexicographically, with no decoration — a stable
