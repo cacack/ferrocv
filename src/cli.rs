@@ -9,21 +9,23 @@
 //! - `0` — operation succeeded
 //!   - `validate`: document is valid
 //!   - `render`: PDF, text, or HTML written to `--output`
+//!   - `tailor`: derived JSON Resume written to `--output`/stdout
 //! - `1` — document parsed as JSON but failed schema validation
-//! - `2` — usage error, IO error, malformed JSON, unknown theme,
-//!   unknown format, or Typst render error
+//! - `2` — usage error (incl. malformed projection flag value), IO
+//!   error, malformed JSON, unknown theme, unknown format, or Typst
+//!   render error
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use serde_json::Value;
 
 use crate::{
-    THEMES, ThemeResolveError, ValidationError, compile_html_resolved, compile_text_resolved,
-    compile_theme_resolved, resolve_theme, validate_value,
+    ProjectionSpec, RedactSet, THEMES, ThemeResolveError, ValidationError, compile_html_resolved,
+    compile_text_resolved, compile_theme_resolved, project, resolve_theme, validate_value,
 };
 
 /// Render JSON Resume documents via embedded Typst.
@@ -89,6 +91,49 @@ enum Commands {
         /// Defaults to `dist/resume.pdf` for `--format pdf`,
         /// `dist/resume.txt` for `--format text`, and
         /// `dist/resume.html` for `--format html`.
+        #[arg(short = 'o', long)]
+        output: Option<PathBuf>,
+        /// Mechanical projection filters. When any are present, the
+        /// document is projected (CONSTITUTION §7) before rendering;
+        /// with none, render behaves exactly as it would on the raw
+        /// input. Equivalent to `ferrocv tailor … | ferrocv render`.
+        #[command(flatten)]
+        projection: ProjectionArgs,
+    },
+    /// Project a master JSON Resume into a derived, narrower cut.
+    ///
+    /// `tailor` runs the projection stage (CONSTITUTION §7) and stops —
+    /// it emits a derived document that is itself valid JSON Resume,
+    /// which you can inspect, commit, or pipe straight into `render`
+    /// (`ferrocv tailor master.json --since 2015 | ferrocv render`).
+    /// The master is read unmodified; only the derived output reflects
+    /// the filters.
+    ///
+    /// Reads the master from PATH, or from stdin when PATH is omitted
+    /// (matching `render`/`validate`). Writes the derived document to
+    /// `--output <file>`, or to stdout when `--output` is omitted, so it
+    /// composes in a pipe. All diagnostics go to stderr unconditionally,
+    /// so stdout always carries only the JSON document.
+    ///
+    /// Caution: with no `--output`, the full derived resume — including
+    /// any PII not removed by `--redact` — is printed to stdout. Prefer
+    /// `--output <file>` for unattended or shared/recorded contexts.
+    ///
+    /// This subcommand implements the mechanical filters (`--since`,
+    /// `--max-bullets`, `--redact`); curated `--audience` selection
+    /// lands in a follow-up.
+    ///
+    /// Exit codes:
+    /// - 0 — projected; derived document written to --output/stdout
+    /// - 1 — master parsed but failed schema validation
+    /// - 2 — usage error (bad flag value), IO error, or parse error
+    Tailor {
+        /// Path to the master JSON Resume. Reads stdin if omitted.
+        path: Option<PathBuf>,
+        #[command(flatten)]
+        projection: ProjectionArgs,
+        /// Output file path for the derived document. Parent directories
+        /// are created as needed. Writes to stdout if omitted.
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
     },
@@ -177,6 +222,53 @@ enum Format {
     Html,
 }
 
+/// Shared mechanical projection flags (issue #148), attached to both
+/// `tailor` and `render` via `#[command(flatten)]`.
+///
+/// Defining the flags once and feeding them to the single
+/// [`crate::project`] transform is what keeps the two surfaces
+/// equivalent (ADR 0005): `render --since X` and `tailor --since X |
+/// render` run the same code. Curated `--audience` selection (#149) adds
+/// its field here.
+#[derive(Debug, Clone, Args)]
+struct ProjectionArgs {
+    /// Drop `work` entries that ended before this ISO 8601 date
+    /// (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`). Entries with no end date
+    /// (ongoing roles) are always kept. A malformed value is a usage
+    /// error.
+    #[arg(long)]
+    since: Option<String>,
+    /// Cap each entry's `highlights` list at N bullets, keeping the
+    /// first N by position. `0` removes all highlights.
+    #[arg(long, value_name = "N")]
+    max_bullets: Option<usize>,
+    /// Redact a named set of PII fields. `pii` removes
+    /// `basics.location`, `basics.phone`, and `basics.email`.
+    #[arg(long, value_enum)]
+    redact: Option<RedactArg>,
+}
+
+impl ProjectionArgs {
+    /// Translate the parsed CLI flags into a library [`ProjectionSpec`].
+    fn to_spec(&self) -> ProjectionSpec {
+        ProjectionSpec {
+            since: self.since.clone(),
+            max_bullets: self.max_bullets,
+            redact: self.redact.map(|r| match r {
+                RedactArg::Pii => RedactSet::Pii,
+            }),
+        }
+    }
+}
+
+/// The `--redact` value vocabulary. A fixed enum so clap rejects unknown
+/// values as usage errors (exit 2) rather than silently ignoring them.
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum RedactArg {
+    /// Standard PII contact fields in `basics`.
+    Pii,
+}
+
 /// Resolve which theme name to use given the format and the optional
 /// `--theme` argument.
 ///
@@ -220,7 +312,19 @@ pub fn run() -> Result<ExitCode> {
             theme,
             format,
             output,
-        } => run_render(path.as_deref(), theme.as_deref(), format, output.as_deref()),
+            projection,
+        } => run_render(
+            path.as_deref(),
+            theme.as_deref(),
+            format,
+            output.as_deref(),
+            &projection.to_spec(),
+        ),
+        Commands::Tailor {
+            path,
+            projection,
+            output,
+        } => run_tailor(path.as_deref(), &projection.to_spec(), output.as_deref()),
         Commands::Themes { command } => match command {
             ThemesCommands::List => run_themes_list(),
             #[cfg(feature = "install")]
@@ -440,6 +544,7 @@ fn run_render(
     theme_name: Option<&str>,
     format: Format,
     output: Option<&Path>,
+    projection: &ProjectionSpec,
 ) -> Result<ExitCode> {
     // Step 1: resolve theme name first. Every format now has a default
     // (`text-minimal` for PDF/text, `html-minimal` for HTML), so this
@@ -468,6 +573,23 @@ fn run_render(
         report_validation_errors(&errors, "; no output written");
         return Ok(ExitCode::from(1));
     }
+
+    // Step 4b: project. When any projection flag is set, run the same
+    // transform `tailor` runs (ADR 0005) and render the derived
+    // document; with no flags the input flows through untouched so
+    // flagless `render` is unchanged. The master is validated above; the
+    // derived document is valid JSON Resume by construction.
+    let value = if projection.is_noop() {
+        value
+    } else {
+        match project(&value, projection) {
+            Ok(derived) => derived,
+            Err(err) => {
+                eprintln!("error: {err}; no output written");
+                return Ok(ExitCode::from(2));
+            }
+        }
+    };
 
     // Step 5: resolve theme. Accepts three spec shapes — bundled
     // name, local `.typ` path, or `@preview/...` spec — and returns a
@@ -543,6 +665,95 @@ fn run_render(
             out_path.display()
         );
         return Ok(ExitCode::from(2));
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Run `ferrocv tailor`.
+///
+/// Projects the master with `spec` and writes the derived JSON Resume to
+/// `output` (or stdout when `None`). Diagnostics always go to stderr so
+/// stdout carries only the document (ADR 0005). Exit-code contract
+/// matches the module header: 0 ok, 1 schema-invalid master, 2
+/// usage/IO/parse error.
+fn run_tailor(
+    path: Option<&Path>,
+    spec: &ProjectionSpec,
+    output: Option<&Path>,
+) -> Result<ExitCode> {
+    // Step 1: read input (IO errors → exit 2 via main's anyhow mapping).
+    let input = read_input(path)?;
+
+    // Step 2: parse JSON.
+    let value: Value = match serde_json::from_str(&input) {
+        Ok(v) => v,
+        Err(err) => {
+            eprintln!("error: {err}");
+            return Ok(ExitCode::from(2));
+        }
+    };
+
+    // Step 3: validate the master before projecting, so a bad master is
+    // a clean schema diagnostic rather than a confusing projected dump.
+    if let Err(errors) = validate_value(&value) {
+        report_validation_errors(&errors, "; no output written");
+        return Ok(ExitCode::from(1));
+    }
+
+    // Step 4: project. The only failure here is a malformed flag value
+    // (e.g. a non-date `--since`), which is a usage error.
+    let derived = match project(&value, spec) {
+        Ok(d) => d,
+        Err(err) => {
+            eprintln!("error: {err}; no output written");
+            return Ok(ExitCode::from(2));
+        }
+    };
+
+    // Step 5: serialize. Pretty-printed for human inspection and clean
+    // diffs; the derived document is valid JSON Resume.
+    let mut json = match serde_json::to_string_pretty(&derived) {
+        Ok(s) => s,
+        Err(err) => {
+            eprintln!("error: failed to serialize derived document: {err}");
+            return Ok(ExitCode::from(2));
+        }
+    };
+    json.push('\n');
+
+    // Step 6: write to file or stdout.
+    match output {
+        Some(out_path) => {
+            if let Some(parent) = out_path.parent()
+                && !parent.as_os_str().is_empty()
+                && let Err(err) = std::fs::create_dir_all(parent)
+            {
+                eprintln!(
+                    "error: failed to create output directory {}: {err}",
+                    parent.display()
+                );
+                return Ok(ExitCode::from(2));
+            }
+            if let Err(err) = std::fs::write(out_path, json.as_bytes()) {
+                eprintln!(
+                    "error: failed to write output file {}: {err}",
+                    out_path.display()
+                );
+                return Ok(ExitCode::from(2));
+            }
+        }
+        None => {
+            // Locked stdout with explicit error handling so a broken
+            // pipe (`ferrocv tailor … | head`) is a clean exit-2, not a
+            // panic — mirrors `run_themes_list`.
+            let stdout = io::stdout();
+            let mut stdout = stdout.lock();
+            if let Err(err) = stdout.write_all(json.as_bytes()) {
+                eprintln!("error: failed to write derived document to stdout: {err}");
+                return Ok(ExitCode::from(2));
+            }
+        }
     }
 
     Ok(ExitCode::SUCCESS)

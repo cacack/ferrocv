@@ -1,0 +1,83 @@
+{
+  "basics": {
+    "name": "Grace Hopper",
+    "label": "Systems Engineer",
+    "summary": "Builds compilers and leads teams.",
+    "email": "grace@example.com",
+    "phone": "+1-555-0100",
+    "url": "https://example.com/grace",
+    "location": {
+      "city": "Arlington",
+      "region": "VA",
+      "countryCode": "US"
+    },
+    "profiles": [
+      {
+        "network": "GitHub",
+        "username": "grace",
+        "url": "https://github.example.com/grace"
+      }
+    ]
+  },
+  "work": [
+    {
+      "name": "Current Corp",
+      "position": "Principal Engineer",
+      "startDate": "2019-02-01",
+      "highlights": [
+        "Led the platform rewrite",
+        "Mentored eight engineers",
+        "Cut build times in half",
+        "Drove the security review program"
+      ],
+      "x-ferrocv": {
+        "audience": ["security", "leadership"],
+        "highlights": [
+          ["leadership"],
+          ["leadership"],
+          [],
+          ["security"]
+        ]
+      }
+    },
+    {
+      "name": "Mid Corp",
+      "position": "Senior Engineer",
+      "startDate": "2015-03-01",
+      "endDate": "2018-12-31",
+      "highlights": [
+        "Shipped the billing service",
+        "Owned on-call rotation",
+        "Reduced error budget burn"
+      ]
+    },
+    {
+      "name": "Old Corp",
+      "position": "Engineer",
+      "startDate": "2003-06-01",
+      "endDate": "2005-06-30",
+      "highlights": [
+        "Wrote the original parser",
+        "Maintained the test harness"
+      ]
+    }
+  ],
+  "volunteer": [
+    {
+      "organization": "Code Mentors",
+      "position": "Mentor",
+      "highlights": [
+        "Ran weekly office hours",
+        "Reviewed capstone projects",
+        "Organized the spring cohort"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "Yale University",
+      "area": "Mathematics",
+      "studyType": "PhD"
+    }
+  ]
+}
