@@ -999,3 +999,86 @@ fn render_without_projection_flags_is_unchanged() {
     let text = std::fs::read_to_string(&out).expect("read output");
     assert!(text.contains("Old Corp"), "no flags ⇒ nothing dropped");
 }
+
+// --- Curated `--audience` selection on `render` (issue #149) --------
+
+#[test]
+fn render_with_audience_flag_selects_tagged_content() {
+    // Current Corp's bullets are tagged [leadership, leadership, [],
+    // security]. --audience security keeps the universal and security
+    // bullets and drops the leadership-only ones.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("master_projection"))
+        .arg("--audience")
+        .arg("security")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success();
+    let text = std::fs::read_to_string(&out).expect("read output");
+    assert!(
+        text.contains("Drove the security review program"),
+        "security-tagged bullet kept"
+    );
+    assert!(
+        !text.contains("Led the platform rewrite"),
+        "leadership-only bullet dropped for --audience security"
+    );
+}
+
+#[test]
+fn render_audience_equivalent_to_tailor_then_render() {
+    // ADR 0005: `render --audience X` is equivalent to `tailor --audience
+    // X | render`. The equivalence lives on the derived JSON; we assert it
+    // transitively through the deterministic text theme — identical text
+    // output implies the same derived document reached the renderer.
+    let tmp = tempfile::tempdir().expect("tempdir");
+
+    // Path A: render directly with --audience.
+    let direct = tmp.path().join("direct.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("master_projection"))
+        .arg("--audience")
+        .arg("security")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&direct)
+        .assert()
+        .success();
+
+    // Path B: tailor to an intermediate cut, then render that cut.
+    let cut = tmp.path().join("cut.json");
+    ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--audience")
+        .arg("security")
+        .arg("--output")
+        .arg(&cut)
+        .assert()
+        .success();
+    let piped = tmp.path().join("piped.txt");
+    ferrocv()
+        .arg("render")
+        .arg(&cut)
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&piped)
+        .assert()
+        .success();
+
+    let direct_text = std::fs::read_to_string(&direct).expect("read direct output");
+    let piped_text = std::fs::read_to_string(&piped).expect("read piped output");
+    assert_eq!(
+        direct_text, piped_text,
+        "render --audience must equal tailor --audience | render"
+    );
+}
