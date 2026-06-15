@@ -5,6 +5,7 @@ Cargo.lock.bak
 .prompts
 .claude/settings.local.json
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 
 # Added by ggshield
 .cache_ggshield
