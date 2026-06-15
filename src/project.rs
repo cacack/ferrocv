@@ -436,7 +436,8 @@ enum Bound {
 /// bare-string `highlights` array — `work`, `volunteer`, `projects`.
 /// The index-parallel `x-ferrocv.highlights` tag array (an array *of
 /// arrays*, nested under `x-ferrocv`) is a sibling key and is left
-/// untouched; mechanical filters do not consume tags (#149's job).
+/// untouched; mechanical filters do not consume tags — that is
+/// [`apply_audience`]'s job, and it runs first (see [`project`]).
 fn apply_max_bullets(out: &mut Value, n: usize) {
     for section in ["work", "volunteer", "projects"] {
         if let Some(entries) = out.get_mut(section).and_then(Value::as_array_mut) {

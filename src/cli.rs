@@ -120,13 +120,14 @@ enum Commands {
     /// any PII not removed by `--redact` — is printed to stdout. Prefer
     /// `--output <file>` for unattended or shared/recorded contexts.
     ///
-    /// This subcommand implements the mechanical filters (`--since`,
-    /// `--max-bullets`, `--redact`); curated `--audience` selection
-    /// lands in a follow-up.
+    /// Supports the curated `--audience` filter and the mechanical
+    /// `--since` / `--max-bullets` / `--redact` filters.
     ///
     /// Exit codes:
     /// - 0 — projected; derived document written to --output/stdout
-    /// - 1 — master parsed but failed schema validation
+    /// - 1 — master parsed but failed schema validation, or an
+    ///   `x-ferrocv.highlights` tag array is misaligned with its
+    ///   `highlights`
     /// - 2 — usage error (bad flag value), IO error, or parse error
     Tailor {
         /// Path to the master JSON Resume. Reads stdin if omitted.
