@@ -23,7 +23,7 @@ Projection is a stage **upstream of rendering**. It reads the master
 unmodified and produces a *derived document that is itself valid JSON
 Resume*, which then flows into the normal render pipeline:
 
-```
+```text
 master resume.json ──▶ [projection] ──▶ derived (valid JSON Resume) ──▶ [render]
 ```
 
@@ -52,7 +52,7 @@ There is **one** projection transform behind **two** CLI surfaces:
   ```
 
 These two are equivalent by construction — `render --audience security` is
-the same as `tailor --audience security | render`. Use `tailor` when you
+the same as `ferrocv tailor --audience security | ferrocv render`. Use `tailor` when you
 want to eyeball or commit the cut; use `render --audience` for the quick
 one-shot. With **no** projection flags, `render` behaves exactly as it
 always has — projection is opt-in and inert by default.
@@ -159,7 +159,7 @@ security bullets drop while "Grew the platform team…" stays.
 
 ## Mechanical filters
 
-Alongside the curated `--audience`, four theme-agnostic filters trim by
+Alongside the curated `--audience`, three theme-agnostic filters trim by
 rule rather than by tag. They compose with `--audience` (and each other):
 
 - **`--since <YYYY|YYYY-MM|YYYY-MM-DD>`** — drop `work` entries that ended

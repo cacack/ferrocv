@@ -152,11 +152,25 @@ fn leadership_cut_drops_security_only_entries() {
 
 #[test]
 fn derived_cut_strips_all_x_ferrocv_metadata() {
-    // The consumed control metadata must not travel into the cut.
+    // The consumed control metadata must not travel into the cut. Check
+    // object *keys* recursively rather than a serialized substring, which
+    // would also match an `x-ferrocv` literal inside a string value.
     let doc = tailor_audience("security");
-    let serialized = serde_json::to_string(&doc).expect("re-serialize derived doc");
     assert!(
-        !serialized.contains("x-ferrocv"),
+        !contains_x_ferrocv_key(&doc),
         "no x-ferrocv key may survive in the derived document"
     );
+}
+
+/// Recursively check whether any object in `value` carries an `x-ferrocv`
+/// key. Mirrors the helper in `tests/tailor_cli.rs` /
+/// `tests/projection_revalidation.rs`.
+fn contains_x_ferrocv_key(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => {
+            map.contains_key("x-ferrocv") || map.values().any(contains_x_ferrocv_key)
+        }
+        Value::Array(items) => items.iter().any(contains_x_ferrocv_key),
+        _ => false,
+    }
 }
