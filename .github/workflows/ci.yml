@@ -17,7 +17,7 @@ jobs:
     name: cargo fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - id: detect
         run: echo "has_cargo=$([ -f Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - if: steps.detect.outputs.has_cargo == 'true'
@@ -32,7 +32,7 @@ jobs:
     name: cargo clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - id: detect
         run: echo "has_cargo=$([ -f Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - if: steps.detect.outputs.has_cargo == 'true'
@@ -55,7 +55,7 @@ jobs:
         # MSRV mirrors Cargo.toml `rust-version`. Bump both together.
         rust: [stable, "1.89"]
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - id: detect
         shell: bash
         run: echo "has_cargo=$([ -f Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
@@ -72,7 +72,7 @@ jobs:
     name: cargo-deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - id: detect
         run: echo "has_cargo=$([ -f Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - if: steps.detect.outputs.has_cargo == 'true'
@@ -96,7 +96,7 @@ jobs:
     # trust surface. SHA-pinning + Dependabot is the mitigation. Revisit
     # if taiki-e/install-action has a security or maintenance incident.
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - id: detect
         run: echo "has_lock=$([ -f Cargo.lock ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - if: steps.detect.outputs.has_lock == 'true'
@@ -110,14 +110,14 @@ jobs:
     name: typos
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: crate-ci/typos@37bb98842b0d8c4ffebdb75301a13db0267cef89 # v1.47.2
 
   verify-no-network-default:
     name: verify-no-network-default
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - id: detect
         run: echo "has_cargo=$([ -f Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - if: steps.detect.outputs.has_cargo == 'true'
@@ -133,7 +133,7 @@ jobs:
     name: coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - id: detect
         run: echo "has_cargo=$([ -f Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - if: steps.detect.outputs.has_cargo == 'true'
