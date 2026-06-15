@@ -111,19 +111,33 @@ also available on `render`, which projects then renders in one shot —
 so `ferrocv render master.json --since 2015` is equivalent to
 `ferrocv tailor master.json --since 2015 | ferrocv render`.
 
-The **mechanical** filters (theme-agnostic, available today):
+The **curated** filter (the headline — keep what's *relevant*, not the
+first N by position):
+
+- `--audience <name>` — keep only content tagged for that audience. Tag
+  an array entry (a `work`/`volunteer`/`project`/… object) by adding an
+  `x-ferrocv` object beside its fields: `"x-ferrocv": { "audience":
+  ["security"] }`. Tag individual bullets with an index-parallel
+  `"x-ferrocv": { "highlights": [["security"], [], ["leadership"]] }`,
+  one tag-list per `highlights` entry. **Untagged content (or an empty
+  `[]` tag) is universal** — kept in every cut — so you can adopt tags
+  incrementally; only content tagged for *other* audiences is dropped.
+  The consumed `x-ferrocv` metadata is stripped from the derived
+  document. (Schema and rationale: ADR 0004.)
+
+The **mechanical** filters (theme-agnostic):
 
 - `--since <YYYY|YYYY-MM|YYYY-MM-DD>` — drop `work` entries that ended
   before the cutoff. Ongoing roles (no `endDate`) are always kept.
 - `--max-bullets <N>` — cap every `highlights` list at the first N
-  bullets.
+  bullets. Runs *after* `--audience`, so it caps the already-curated
+  set.
 - `--redact pii` — remove `basics.location`, `basics.phone`, and
   `basics.email` from the cut. Identity fields (`name`, `label`,
   `summary`, `url`, `profiles`) are kept.
 
 With no projection flags, `render` behaves exactly as it does on any
-input — projection is opt-in and inert by default. Curated,
-audience-tag-driven selection (`--audience`) is in progress.
+input — projection is opt-in and inert by default.
 
 `tailor` writes the derived document to `--output <file>`, or to stdout
 when `--output` is omitted, so it composes in a pipe; all diagnostics

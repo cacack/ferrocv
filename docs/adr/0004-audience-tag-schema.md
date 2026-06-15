@@ -1,6 +1,6 @@
 # 0004. Carry audience tags under a single `x-ferrocv` namespace; untagged content is universal
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-05-31
 
 ## Context

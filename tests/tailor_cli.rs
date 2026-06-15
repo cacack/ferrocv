@@ -318,3 +318,97 @@ fn tailor_rejects_unknown_redact_value() {
         .assert()
         .code(2);
 }
+
+/// Highlight strings of a derived `work` entry, in order.
+fn work_highlights(doc: &Value, index: usize) -> Vec<String> {
+    doc["work"][index]["highlights"]
+        .as_array()
+        .expect("highlights is an array")
+        .iter()
+        .map(|h| h.as_str().expect("highlight is a string").to_owned())
+        .collect()
+}
+
+#[test]
+fn tailor_audience_selects_tagged_content() {
+    // The fixture's "Current Corp" is tagged for security+leadership with
+    // per-highlight tags [leadership, leadership, [], security]. For
+    // --audience security: the entry survives (security ∈ tags); its
+    // leadership-only highlights drop, while the universal ([]) and
+    // security highlights stay. Untagged entries are kept whole.
+    let assert = ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--audience")
+        .arg("security")
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+    let doc: Value =
+        serde_json::from_slice(&assert.get_output().stdout).expect("stdout is valid JSON");
+    // No tagged entry is dropped by --audience security (all three work
+    // entries are universal or security-tagged).
+    assert_eq!(
+        work_names(&doc),
+        vec!["Current Corp", "Mid Corp", "Old Corp"]
+    );
+    assert_eq!(
+        work_highlights(&doc, 0),
+        vec![
+            "Cut build times in half",
+            "Drove the security review program"
+        ]
+    );
+}
+
+#[test]
+fn tailor_audience_strips_x_ferrocv_from_derived_document() {
+    // Curated selection consumes the tags; the derived document must
+    // carry no x-ferrocv anywhere (ADR 0004 — tidiness + not leaking the
+    // user's targeting topology). #150 owns the exhaustive re-validation;
+    // this is the surface-level guard.
+    let assert = ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--audience")
+        .arg("security")
+        .assert()
+        .success();
+    let doc: Value =
+        serde_json::from_slice(&assert.get_output().stdout).expect("stdout is valid JSON");
+    // Walk the parsed tree rather than substring-matching the raw bytes:
+    // a substring check would false-pass if a field *value* contained the
+    // text, and would miss a key like `x-ferrocv-extra`.
+    assert!(
+        !contains_x_ferrocv_key(&doc),
+        "derived document must not contain any x-ferrocv key, anywhere"
+    );
+}
+
+/// Recursively check whether any object in `value` has an `x-ferrocv` key.
+fn contains_x_ferrocv_key(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => {
+            map.contains_key("x-ferrocv") || map.values().any(contains_x_ferrocv_key)
+        }
+        Value::Array(items) => items.iter().any(contains_x_ferrocv_key),
+        _ => false,
+    }
+}
+
+#[test]
+fn tailor_audience_highlights_mismatch_is_data_error_exit_1() {
+    // A schema-valid master whose x-ferrocv.highlights length differs from
+    // its highlights length is a document defect, not a usage error: it
+    // fails like a schema problem (exit 1), names the offending entry, and
+    // writes nothing to stdout (ADR 0004).
+    ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_audience_mismatch"))
+        .arg("--audience")
+        .arg("security")
+        .assert()
+        .code(1)
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains("Misaligned Corp"));
+}

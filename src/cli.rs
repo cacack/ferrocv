@@ -24,8 +24,9 @@ use clap::{Args, Parser, Subcommand};
 use serde_json::Value;
 
 use crate::{
-    ProjectionSpec, RedactSet, THEMES, ThemeResolveError, ValidationError, compile_html_resolved,
-    compile_text_resolved, compile_theme_resolved, project, resolve_theme, validate_value,
+    ProjectionError, ProjectionSpec, RedactSet, THEMES, ThemeResolveError, ValidationError,
+    compile_html_resolved, compile_text_resolved, compile_theme_resolved, project, resolve_theme,
+    validate_value,
 };
 
 /// Render JSON Resume documents via embedded Typst.
@@ -228,10 +229,15 @@ enum Format {
 /// Defining the flags once and feeding them to the single
 /// [`crate::project`] transform is what keeps the two surfaces
 /// equivalent (ADR 0005): `render --since X` and `tailor --since X |
-/// render` run the same code. Curated `--audience` selection (#149) adds
-/// its field here.
+/// render` run the same code.
 #[derive(Debug, Clone, Args)]
 struct ProjectionArgs {
+    /// Keep only content tagged for this audience under `x-ferrocv`
+    /// (curated selection). Untagged content is kept for every audience;
+    /// tagged content is kept only for the audiences it lists. Takes
+    /// exactly one value.
+    #[arg(long, value_name = "NAME")]
+    audience: Option<String>,
     /// Drop `work` entries that ended before this ISO 8601 date
     /// (`YYYY`, `YYYY-MM`, or `YYYY-MM-DD`). Entries with no end date
     /// (ongoing roles) are always kept. A malformed value is a usage
@@ -252,12 +258,27 @@ impl ProjectionArgs {
     /// Translate the parsed CLI flags into a library [`ProjectionSpec`].
     fn to_spec(&self) -> ProjectionSpec {
         ProjectionSpec {
+            audience: self.audience.clone(),
             since: self.since.clone(),
             max_bullets: self.max_bullets,
             redact: self.redact.map(|r| match r {
                 RedactArg::Pii => RedactSet::Pii,
             }),
         }
+    }
+}
+
+/// Map a [`ProjectionError`] to its process exit code.
+///
+/// A malformed flag *value* is a usage error (exit 2), consistent with
+/// `--since banana` and an unknown `--redact` value. A misaligned
+/// `x-ferrocv.highlights` tag array is a defect in the master *document*,
+/// not the invocation, so it shares the schema-failure exit code (1) the
+/// way a structurally-invalid master already does.
+fn projection_exit_code(err: &ProjectionError) -> u8 {
+    match err {
+        ProjectionError::InvalidSince(_) => 2,
+        ProjectionError::HighlightsTagMismatch { .. } => 1,
     }
 }
 
@@ -595,7 +616,7 @@ fn run_render(
             Ok(derived) => derived,
             Err(err) => {
                 eprintln!("error: {err}; no output written");
-                return Ok(ExitCode::from(2));
+                return Ok(ExitCode::from(projection_exit_code(&err)));
             }
         }
     };
@@ -719,13 +740,15 @@ fn run_tailor(
         return Ok(ExitCode::from(1));
     }
 
-    // Step 4: project. The only failure here is a malformed flag value
-    // (e.g. a non-date `--since`), which is a usage error.
+    // Step 4: project. A malformed flag value (e.g. a non-date `--since`)
+    // is a usage error (exit 2); a misaligned audience tag array is a
+    // defect in the master document, treated like a schema failure (exit
+    // 1). See `projection_exit_code`.
     let derived = match project(&value, spec) {
         Ok(d) => d,
         Err(err) => {
             eprintln!("error: {err}; no output written");
-            return Ok(ExitCode::from(2));
+            return Ok(ExitCode::from(projection_exit_code(&err)));
         }
     };
 

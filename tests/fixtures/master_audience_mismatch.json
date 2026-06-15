@@ -1,0 +1,24 @@
+{
+  "basics": {
+    "name": "Ada Lovelace",
+    "label": "Engineer"
+  },
+  "work": [
+    {
+      "name": "Misaligned Corp",
+      "position": "Engineer",
+      "startDate": "2020-01-01",
+      "highlights": [
+        "First bullet",
+        "Second bullet",
+        "Third bullet"
+      ],
+      "x-ferrocv": {
+        "highlights": [
+          ["security"],
+          ["security"]
+        ]
+      }
+    }
+  ]
+}

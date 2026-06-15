@@ -1,6 +1,6 @@
 # 0005. Ship projection as both a standalone `tailor` subcommand and `render` flags over one transform
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-05-31
 
 ## Context
