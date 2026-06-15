@@ -105,6 +105,12 @@ The point of ferrocv is to maintain **one comprehensive master
 reads the master unmodified and produces a derived document that is
 itself valid JSON Resume, which flows into the normal render pipeline.
 
+For a full walkthrough — tagging a master, the include-by-default rule,
+worked cuts, and the gotchas — see the [tailoring
+guide](docs/tailoring.md); [`examples/master.resume.json`](examples/master.resume.json)
+is a tagged master to start from. The rest of this section is the
+condensed reference.
+
 `ferrocv tailor` runs that stage and stops, emitting the derived
 document so you can inspect, commit, or pipe it. The same flags are
 also available on `render`, which projects then renders in one shot —

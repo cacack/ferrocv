@@ -1,0 +1,115 @@
+{
+  "basics": {
+    "name": "Ada Lovelace",
+    "label": "Staff Software Engineer",
+    "summary": "Backend and platform engineer who has led security-critical migrations and grown teams. Maintains one master resume and tailors it per application with ferrocv.",
+    "email": "ada@example.com",
+    "phone": "+1-555-0142",
+    "url": "https://example.com/ada",
+    "location": {
+      "city": "Portland",
+      "region": "OR",
+      "countryCode": "US"
+    },
+    "profiles": [
+      {
+        "network": "GitHub",
+        "username": "ada",
+        "url": "https://github.example.com/ada"
+      }
+    ]
+  },
+  "work": [
+    {
+      "name": "Northwind Platform",
+      "position": "Staff Engineer",
+      "startDate": "2020-04-01",
+      "summary": "Platform team owning auth, CI, and developer tooling.",
+      "highlights": [
+        "Led the zero-downtime migration to short-lived workload credentials",
+        "Grew the platform team from 4 to 11 engineers",
+        "Cut median CI time from 18 to 6 minutes",
+        "Drove the SOC 2 Type II audit to a clean report"
+      ],
+      "x-ferrocv": {
+        "audience": ["security", "leadership"],
+        "highlights": [
+          ["security"],
+          ["leadership"],
+          [],
+          ["security"]
+        ]
+      }
+    },
+    {
+      "name": "Cobalt Analytics",
+      "position": "Senior Backend Engineer",
+      "startDate": "2016-06-01",
+      "endDate": "2020-03-15",
+      "highlights": [
+        "Built the event-ingestion pipeline handling 2B events/day",
+        "Mentored four engineers to senior level",
+        "Owned the on-call rotation and cut paging volume 40%"
+      ],
+      "x-ferrocv": {
+        "highlights": [
+          [],
+          ["leadership"],
+          []
+        ]
+      }
+    },
+    {
+      "name": "Riverstone Software",
+      "position": "Software Engineer",
+      "startDate": "2011-08-01",
+      "endDate": "2014-05-31",
+      "highlights": [
+        "Shipped the original billing service",
+        "Wrote the company's first integration test suite"
+      ]
+    }
+  ],
+  "volunteer": [
+    {
+      "organization": "OWASP Local Chapter",
+      "position": "Workshop Lead",
+      "startDate": "2019-01-01",
+      "highlights": [
+        "Ran quarterly secure-coding workshops",
+        "Built the chapter's CTF training ladder"
+      ],
+      "x-ferrocv": {
+        "audience": ["security"]
+      }
+    },
+    {
+      "organization": "Code Mentors",
+      "position": "Mentor",
+      "startDate": "2017-09-01",
+      "highlights": [
+        "Reviewed capstone projects for bootcamp graduates"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "name": "Security",
+      "keywords": ["Threat modeling", "OAuth2 / OIDC", "Secrets management"],
+      "x-ferrocv": {
+        "audience": ["security"]
+      }
+    },
+    {
+      "name": "Languages",
+      "keywords": ["Rust", "Go", "Python"]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of London",
+      "area": "Computer Science",
+      "studyType": "BSc"
+    }
+  ]
+}
