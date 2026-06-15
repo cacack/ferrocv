@@ -252,6 +252,33 @@ fn tailor_derived_document_revalidates() {
 }
 
 #[test]
+fn tailor_audience_derived_document_revalidates() {
+    // The curated `--audience` path mutates structure (drops entries,
+    // filters highlights, strips every x-ferrocv key), so its derived
+    // output is the one most at risk of going invalid. Tailor to a file,
+    // then validate that file with the same binary. (Exhaustive
+    // library-level re-validation across the filter matrix lives in
+    // `tests/projection_revalidation.rs`.)
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("cut.json");
+    ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--audience")
+        .arg("security")
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+    ferrocv()
+        .arg("validate")
+        .arg(&out)
+        .assert()
+        .success()
+        .stderr(predicate::str::is_empty());
+}
+
+#[test]
 fn tailor_reads_master_from_stdin() {
     let input = std::fs::read_to_string(fixture("master_projection")).expect("read master");
     let assert = ferrocv()
@@ -365,8 +392,9 @@ fn tailor_audience_selects_tagged_content() {
 fn tailor_audience_strips_x_ferrocv_from_derived_document() {
     // Curated selection consumes the tags; the derived document must
     // carry no x-ferrocv anywhere (ADR 0004 — tidiness + not leaking the
-    // user's targeting topology). #150 owns the exhaustive re-validation;
-    // this is the surface-level guard.
+    // user's targeting topology). This is the surface-level guard; the
+    // exhaustive re-validation that the stripped document stays valid
+    // JSON Resume lives in `tests/projection_revalidation.rs` (#150).
     let assert = ferrocv()
         .arg("tailor")
         .arg(fixture("master_projection"))
