@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/cacack/ferrocv/compare/v0.7.0...v0.8.0) (2026-06-15)
+
+
+### Features
+
+* add mechanical projection filters and tailor subcommand ([3c4e527](https://github.com/cacack/ferrocv/commit/3c4e5270e97dd259524f0d44f245bbc6c8a50888))
+* **projection:** add curated --audience selection over x-ferrocv tags ([17a4be3](https://github.com/cacack/ferrocv/commit/17a4be3c2e8088b138be1d412a3038a2fc239933)), closes [#149](https://github.com/cacack/ferrocv/issues/149)
+
 ## [0.7.0](https://github.com/cacack/ferrocv/compare/v0.6.0...v0.7.0) (2026-06-01)
 
 
