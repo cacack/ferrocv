@@ -62,7 +62,7 @@ typst-html = "0.14.2"
 # binary. The `fonts` feature is what carries the actual font bytes.
 # Bundling is what gives us cross-host reproducibility (CONSTITUTION
 # §6.4: same Typst sandbox everywhere) without scanning system fonts.
-typst-assets = { version = "0.14.2", features = ["fonts"] }
+typst-assets = { version = "0.15.0", features = ["fonts"] }
 
 # --- `install` feature: network-capable deps, gated behind the
 # `install` Cargo feature so they never enter the default build. Every
