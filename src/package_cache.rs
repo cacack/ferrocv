@@ -58,7 +58,7 @@ pub(crate) fn package_file_path(spec: &PackageSpec, vpath: &VirtualPath) -> Opti
         return None;
     }
     let cache_dir = package_cache_dir(&spec.name, &spec.version).ok()?;
-    let relative = vpath.as_rootless_path();
+    let relative = std::path::Path::new(vpath.get_without_slash());
     for component in relative.components() {
         match component {
             std::path::Component::Normal(_) | std::path::Component::CurDir => {}
@@ -482,7 +482,7 @@ mod tests {
                 name: "demo".to_owned(),
                 version: "1.2.3".to_owned(),
             };
-            let vpath = VirtualPath::new("/src/lib.typ");
+            let vpath = VirtualPath::new("/src/lib.typ").unwrap();
             let path = package_file_path(&spec, &vpath)
                 .expect("path must resolve under populated cache root");
             let expected = tmp.path().join("packages/preview/demo/1.2.3/src/lib.typ");
@@ -499,7 +499,7 @@ mod tests {
                 name: "demo".to_owned(),
                 version: "1.2.3".to_owned(),
             };
-            let vpath = VirtualPath::new("/");
+            let vpath = VirtualPath::new("/").unwrap();
             let path = package_file_path(&spec, &vpath)
                 .expect("root vpath must still resolve to the cache dir");
             let expected = tmp.path().join("packages/preview/demo/1.2.3");
@@ -516,7 +516,7 @@ mod tests {
                 name: "x".to_owned(),
                 version: "1.0".to_owned(),
             };
-            let vpath = VirtualPath::new("/lib.typ");
+            let vpath = VirtualPath::new("/lib.typ").unwrap();
             assert!(
                 package_file_path(&spec, &vpath).is_none(),
                 "only @preview/ namespace is resolvable from cache",
@@ -539,7 +539,7 @@ mod tests {
             name: "demo".to_owned(),
             version: "1.0.0".to_owned(),
         };
-        let vpath = VirtualPath::new("/lib.typ");
+        let vpath = VirtualPath::new("/lib.typ").unwrap();
         assert!(
             package_file_path(&spec, &vpath).is_none(),
             "empty FERROCV_CACHE_DIR must collapse to None",

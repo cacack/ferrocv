@@ -106,12 +106,13 @@ use std::sync::OnceLock;
 use serde_json::Value;
 use typst::diag::{FileError, FileResult, PackageError, Warned};
 use typst::foundations::{Bytes, Datetime};
-use typst::layout::{Frame, FrameItem, PagedDocument};
-use typst::syntax::{FileId, Source, VirtualPath};
+use typst::layout::{Frame, FrameItem};
+use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Feature, Library, LibraryExt, World};
-use typst_html::HtmlDocument;
+use typst_html::{HtmlDocument, HtmlOptions};
+use typst_layout::PagedDocument;
 use typst_pdf::PdfOptions;
 
 use crate::theme::{OwnedTheme, ResolvedTheme, Theme};
@@ -121,6 +122,19 @@ const MAIN_PATH: &str = "/main.typ";
 /// Virtual path the JSON Resume bytes are served under. Typst sources
 /// reach them via `json("/resume.json")`.
 const RESUME_JSON_PATH: &str = "/resume.json";
+
+/// Intern a project-rooted [`FileId`] from a virtual path string.
+///
+/// Typst 0.15 moved file identity to a `RootedPath` (root + virtual
+/// path) and made [`VirtualPath::new`] fallible. Every path we feed it
+/// is an in-binary constant or a bundled theme path, so an invalid
+/// path is a packaging bug, not a runtime condition — hence `expect`.
+fn project_file_id(path: &str) -> FileId {
+    FileId::new(RootedPath::new(
+        VirtualRoot::Project,
+        VirtualPath::new(path).expect("bundled virtual path must be a valid Typst path"),
+    ))
+}
 
 /// One Typst diagnostic, flattened into a renderer-agnostic shape.
 ///
@@ -397,7 +411,7 @@ fn render_world_to_html(world: &FerrocvWorld) -> Result<String, RenderError> {
         warnings: _,
     } = typst::compile::<HtmlDocument>(world);
     let document = output.map_err(diagnostics_to_error)?;
-    typst_html::html(&document).map_err(diagnostics_to_error)
+    typst_html::html(&document, &HtmlOptions::default()).map_err(diagnostics_to_error)
 }
 
 /// Maximum vertical distance (in PostScript points) between two text
@@ -449,8 +463,8 @@ fn extract_text(document: &PagedDocument) -> String {
     // Gather per-page items so we can preserve a blank line between
     // pages without conflating cross-page y deltas with paragraph
     // gaps.
-    let mut pages: Vec<Vec<TextItemPosition>> = Vec::with_capacity(document.pages.len());
-    for page in &document.pages {
+    let mut pages: Vec<Vec<TextItemPosition>> = Vec::with_capacity(document.pages().len());
+    for page in document.pages() {
         let mut page_items: Vec<TextItemPosition> = Vec::new();
         collect_from_frame(&page.frame, 0.0, 0.0, &mut page_items);
         pages.push(page_items);
@@ -733,7 +747,7 @@ impl FerrocvWorld {
     /// Build a World whose only theme file is a single inline source
     /// registered at [`MAIN_PATH`].
     fn from_single_source(source_text: &str, data: &Value) -> Self {
-        let entrypoint = FileId::new(None, VirtualPath::new(MAIN_PATH));
+        let entrypoint = project_file_id(MAIN_PATH);
         let entrypoint_source = Source::new(entrypoint, source_text.to_owned());
         Self::assemble(entrypoint, entrypoint_source, HashMap::new(), data)
     }
@@ -756,12 +770,12 @@ impl FerrocvWorld {
     /// also ingest [`ResolvedTheme`] / [`OwnedTheme`] without
     /// allocating a temporary `Theme`.
     fn from_bundle<B: ThemeBundle + ?Sized>(bundle: &B, data: &Value) -> Self {
-        let entrypoint = FileId::new(None, VirtualPath::new(bundle.entrypoint()));
+        let entrypoint = project_file_id(bundle.entrypoint());
         let mut theme_files: HashMap<FileId, Bytes> = HashMap::new();
         let mut entrypoint_text: Option<String> = None;
 
         for (path, bytes) in bundle.files() {
-            let id = FileId::new(None, VirtualPath::new(path));
+            let id = project_file_id(path);
             // The entrypoint gets parsed into a Source below. We also
             // keep its bytes in the map so a `file()` lookup works
             // (Typst occasionally reads the main file as raw bytes
@@ -794,7 +808,7 @@ impl FerrocvWorld {
         theme_files: HashMap<FileId, Bytes>,
         data: &Value,
     ) -> Self {
-        let resume_id = FileId::new(None, VirtualPath::new(RESUME_JSON_PATH));
+        let resume_id = project_file_id(RESUME_JSON_PATH);
         // `serde_json::to_vec` is infallible for `Value` — the Value
         // tree by construction never fails to serialize. Unwrap is
         // an invariant assertion, not a possible Typst behavior.
@@ -955,7 +969,7 @@ impl World for FerrocvWorld {
         // (issue #114, CONSTITUTION §6.1 same-class extension). Under
         // default features the cache reader is not compiled in, so we
         // keep the blanket rejection.
-        if let Some(spec) = id.package() {
+        if let VirtualRoot::Package(spec) = id.root() {
             let bytes = resolve_package_file(spec, id.vpath())?;
             let text = std::str::from_utf8(&bytes).map_err(|_| FileError::InvalidUtf8)?;
             return Ok(Source::new(id, text.to_owned()));
@@ -964,10 +978,10 @@ impl World for FerrocvWorld {
         // a fresh `Source` per lookup is cheap enough for Phase 1.
         if let Some(bytes) = self.theme_files.get(&id) {
             let text = std::str::from_utf8(bytes.as_slice())
-                .map_err(|_| FileError::NotFound(id.vpath().as_rootless_path().into()))?;
+                .map_err(|_| FileError::NotFound(id.vpath().get_without_slash().into()))?;
             return Ok(Source::new(id, text.to_owned()));
         }
-        Err(FileError::NotFound(id.vpath().as_rootless_path().into()))
+        Err(FileError::NotFound(id.vpath().get_without_slash().into()))
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
@@ -978,21 +992,21 @@ impl World for FerrocvWorld {
         // manifest read (`world.file(@preview/...:typst.toml)`) and any
         // raw `read()` calls inside a package resolve from the same
         // local cache the source lookup uses.
-        if let Some(spec) = id.package() {
+        if let VirtualRoot::Package(spec) = id.root() {
             let bytes = resolve_package_file(spec, id.vpath())?;
             return Ok(Bytes::new(bytes));
         }
         if let Some(bytes) = self.theme_files.get(&id) {
             return Ok(bytes.clone());
         }
-        Err(FileError::NotFound(id.vpath().as_rootless_path().into()))
+        Err(FileError::NotFound(id.vpath().get_without_slash().into()))
     }
 
     fn font(&self, index: usize) -> Option<Font> {
         shared_fonts().1.get(index).cloned()
     }
 
-    fn today(&self, _offset: Option<i64>) -> Option<Datetime> {
+    fn today(&self, _offset: Option<typst::foundations::Duration>) -> Option<Datetime> {
         // We return None deliberately. Reasoning:
         //
         // - Reproducibility matters for golden-file tests landing
