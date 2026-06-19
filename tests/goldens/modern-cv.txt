@@ -17,10 +17,7 @@ Self-directed, Mathematics   1833-01-01 – 1843-01-01
 Projects
 
 Notes on the Analytical Engine
-
-Expanded translation of Menabrea's sketch, including the first published algorithm for a computing machine.
-
-1842-01-01  –
+Expanded translation of Menabrea's sketch, including the first published algorithm for a computing machine.  1842-01-01  –
 1843-07-01
 • Note G — the Bernoulli-number algorithm
 Certifications
