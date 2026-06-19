@@ -64,12 +64,23 @@ jobs:
       # x86_64-unknown-linux-musl` here, where (a) the musl std isn't
       # installed and (b) AddressSanitizer is incompatible with musl's
       # static libc. Forcing -gnu sidesteps both.
+      # Build is split from run so a *compile* failure (e.g. a nightly
+      # rustc regression breaking typst-library) is distinguishable from
+      # a *fuzz* failure. Only the run step writes a crash corpus, so only
+      # a run-step failure should file the "crash" issue below — a build
+      # break fails the job red without the misleading corpus-link issue.
+      # The run step reuses this cached build, so there is no extra cost.
+      - name: Build ${{ matrix.target }}
+        working-directory: fuzz
+        run: cargo +nightly fuzz build --target x86_64-unknown-linux-gnu ${{ matrix.target }}
+
       - name: Fuzz ${{ matrix.target }}
+        id: run
         working-directory: fuzz
         run: cargo +nightly fuzz run --target x86_64-unknown-linux-gnu ${{ matrix.target }} -- -max_total_time=120
 
       - name: Upload crash artifacts
-        if: failure()
+        if: failure() && steps.run.conclusion == 'failure'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: fuzz-crashes-${{ matrix.target }}-${{ github.run_id }}
@@ -78,7 +89,7 @@ jobs:
           retention-days: 30
 
       - name: Assemble issue body
-        if: failure()
+        if: failure() && steps.run.conclusion == 'failure'
         run: |
           cat > /tmp/fuzz-issue-body.md <<'FUZZBODY'
           # Nightly fuzz failure: `${{ matrix.target }}`
@@ -104,7 +115,7 @@ jobs:
           FUZZBODY
 
       - name: File issue on failure
-        if: failure()
+        if: failure() && steps.run.conclusion == 'failure'
         uses: peter-evans/create-issue-from-file@fca9117c27cdc29c6c4db3b86c48e4115a786710 # v6.0.0
         with:
           title: "Nightly fuzz failure: ${{ matrix.target }} @ ${{ github.sha }}"
