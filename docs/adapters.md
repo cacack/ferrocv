@@ -19,8 +19,14 @@ adapter work; this guide refers to them by number throughout.
   upstream changes is accepted in exchange for visual variety.
 - **Native themes** implement a `render(data) -> content` contract
   directly against parsed JSON Resume data, with no upstream to wrap.
-  The `text-minimal` theme in `src/theme.rs` is the only native theme
-  shipped today.
+  The contract is a shared Typst prelude
+  (`assets/themes/_prelude/lib.typ`, served at `/themes/_prelude/lib.typ`
+  in the embedded `FerrocvWorld`): a native theme `#import`s it for the
+  optional-field helpers (`opt`, `nz`, `join_present`, `date_range`) and
+  section accessors (`items`), then writes only its own layout.
+  `text-minimal` (plain text) and `html-minimal` (semantic HTML) both
+  ride it today — proof the data-access layer is shared while layout
+  stays per-format.
 
 Pick **adapter** when:
 
@@ -42,9 +48,10 @@ Pick **native theme** when:
 
 The two layers stay separable: adapter code does not leak into native
 themes, and native themes do not depend on adapter internals
-(CONSTITUTION §4). This guide covers adapters only; a native-theme
-guide will land when there's a second native theme to draw the
-pattern from.
+(CONSTITUTION §4). This guide covers adapters only; the full
+native-theme authoring guide (the prelude API, the scaffold command,
+golden-test setup) is tracked under issue #183. For now, the prelude
+source and the two themes that import it are the worked examples.
 
 ## Two ways to use a Typst Universe template
 

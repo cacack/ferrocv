@@ -12,45 +12,14 @@
 // - Default font and size — no font-family directives so the output
 //   is reproducible across hosts (CONSTITUTION §6).
 // - Defensive optional-field reads — JSON Resume v1.0.0 has zero
-//   required fields; every accessor must tolerate missing keys.
+//   required fields; every accessor must tolerate missing keys. The
+//   helpers (`opt`, `nz`, `join_present`, `date_range`) and section
+//   accessor (`items`) come from the shared native-theme prelude
+//   (CONSTITUTION §4); this theme contributes only layout.
+
+#import "/themes/_prelude/lib.typ": *
 
 #let resume = json("/resume.json")
-
-// --- Optional-field helpers ----------------------------------------
-//
-// `opt(d, k)` returns `d.at(k)` if `d` is a dictionary and `k` is
-// present, otherwise `none`. Lets per-section code stay readable
-// without sprinkling `if "x" in d { ... }` everywhere.
-#let opt(d, k) = if type(d) == dictionary and k in d { d.at(k) } else { none }
-
-// `nz(s)` collapses both absent and empty-string values to `none` so
-// sections can uniformly check `if value != none`.
-#let nz(s) = if s == none or s == "" { none } else { s }
-
-// Join a list of optional strings with `sep`, dropping `none`/empty.
-// Used for location ("city, region, country") where any subset of
-// components may be missing.
-#let join_present(parts, sep) = {
-  let kept = parts.filter(p => p != none and p != "")
-  kept.join(sep)
-}
-
-// Format a date range. Either bound may be missing; an absent
-// `endDate` becomes "Present". Returns `none` if both are absent so
-// the caller can skip the line entirely.
-#let date_range(item) = {
-  let start = nz(opt(item, "startDate"))
-  let end = nz(opt(item, "endDate"))
-  if start == none and end == none {
-    none
-  } else if start != none and end != none {
-    start + " - " + end
-  } else if start != none {
-    start + " - Present"
-  } else {
-    end
-  }
-}
 
 // --- Page setup ----------------------------------------------------
 //
@@ -90,30 +59,27 @@
   // basics.profiles — emit each as a contact-style line. Treated as
   // header continuation rather than a separate section so the
   // rendering matches how social profiles read on a real resume.
-  let profiles = opt(basics, "profiles")
-  if profiles != none and type(profiles) == array {
-    for profile in profiles {
-      let network = nz(opt(profile, "network"))
-      let username = nz(opt(profile, "username"))
-      let url = nz(opt(profile, "url"))
-      let label_part = if network != none and username != none {
-        network + ": " + username
-      } else if network != none {
-        network
-      } else if username != none {
-        username
-      } else { none }
-      let line = if label_part != none and url != none {
-        label_part + " - " + url
-      } else if label_part != none {
-        label_part
-      } else if url != none {
-        url
-      } else { none }
-      if line != none {
-        [#line]
-        linebreak()
-      }
+  for profile in items(basics, "profiles") {
+    let network = nz(opt(profile, "network"))
+    let username = nz(opt(profile, "username"))
+    let url = nz(opt(profile, "url"))
+    let label_part = if network != none and username != none {
+      network + ": " + username
+    } else if network != none {
+      network
+    } else if username != none {
+      username
+    } else { none }
+    let line = if label_part != none and url != none {
+      label_part + " - " + url
+    } else if label_part != none {
+      label_part
+    } else if url != none {
+      url
+    } else { none }
+    if line != none {
+      [#line]
+      linebreak()
     }
   }
   parbreak()
@@ -129,8 +95,8 @@
 }
 
 // --- Work ----------------------------------------------------------
-#let work = opt(resume, "work")
-#if work != none and type(work) == array and work.len() > 0 {
+#let work = items(resume, "work")
+#if work.len() > 0 {
   text(weight: "bold")[Work]
   parbreak()
   for entry in work {
@@ -157,18 +123,15 @@
       [#work_summary]
       linebreak()
     }
-    let highlights = opt(entry, "highlights")
-    if highlights != none and type(highlights) == array {
-      for h in highlights {
-        if h != none and h != "" {
-          // Pre-build the prefixed string in code mode so the literal
-          // "- " never enters Typst markup mode, where it would be
-          // parsed as a list item and rendered with a `•` bullet.
-          // Bullets survive frame extraction and add ATS noise.
-          let prefixed = "- " + h
-          [#prefixed]
-          linebreak()
-        }
+    for h in items(entry, "highlights") {
+      if h != none and h != "" {
+        // Pre-build the prefixed string in code mode so the literal
+        // "- " never enters Typst markup mode, where it would be
+        // parsed as a list item and rendered with a `•` bullet.
+        // Bullets survive frame extraction and add ATS noise.
+        let prefixed = "- " + h
+        [#prefixed]
+        linebreak()
       }
     }
     parbreak()
@@ -176,8 +139,8 @@
 }
 
 // --- Education -----------------------------------------------------
-#let education = opt(resume, "education")
-#if education != none and type(education) == array and education.len() > 0 {
+#let education = items(resume, "education")
+#if education.len() > 0 {
   text(weight: "bold")[Education]
   parbreak()
   for entry in education {
@@ -203,15 +166,15 @@
 }
 
 // --- Skills --------------------------------------------------------
-#let skills = opt(resume, "skills")
-#if skills != none and type(skills) == array and skills.len() > 0 {
+#let skills = items(resume, "skills")
+#if skills.len() > 0 {
   text(weight: "bold")[Skills]
   parbreak()
   for skill in skills {
     let name = nz(opt(skill, "name"))
     let level = nz(opt(skill, "level"))
-    let keywords = opt(skill, "keywords")
-    let keywords_str = if keywords != none and type(keywords) == array and keywords.len() > 0 {
+    let keywords = items(skill, "keywords")
+    let keywords_str = if keywords.len() > 0 {
       keywords.filter(k => k != none and k != "").join(", ")
     } else { none }
     let label_part = if name != none and level != none {
@@ -237,8 +200,8 @@
 }
 
 // --- Projects ------------------------------------------------------
-#let projects = opt(resume, "projects")
-#if projects != none and type(projects) == array and projects.len() > 0 {
+#let projects = items(resume, "projects")
+#if projects.len() > 0 {
   text(weight: "bold")[Projects]
   parbreak()
   for entry in projects {
@@ -267,8 +230,8 @@
 }
 
 // --- Volunteer -----------------------------------------------------
-#let volunteer = opt(resume, "volunteer")
-#if volunteer != none and type(volunteer) == array and volunteer.len() > 0 {
+#let volunteer = items(resume, "volunteer")
+#if volunteer.len() > 0 {
   text(weight: "bold")[Volunteer]
   parbreak()
   for entry in volunteer {
@@ -295,14 +258,11 @@
       [#v_summary]
       linebreak()
     }
-    let highlights = opt(entry, "highlights")
-    if highlights != none and type(highlights) == array {
-      for h in highlights {
-        if h != none and h != "" {
-          let prefixed = "- " + h
-          [#prefixed]
-          linebreak()
-        }
+    for h in items(entry, "highlights") {
+      if h != none and h != "" {
+        let prefixed = "- " + h
+        [#prefixed]
+        linebreak()
       }
     }
     parbreak()
@@ -310,8 +270,8 @@
 }
 
 // --- Awards --------------------------------------------------------
-#let awards = opt(resume, "awards")
-#if awards != none and type(awards) == array and awards.len() > 0 {
+#let awards = items(resume, "awards")
+#if awards.len() > 0 {
   text(weight: "bold")[Awards]
   parbreak()
   for entry in awards {
@@ -337,8 +297,8 @@
 }
 
 // --- Certificates --------------------------------------------------
-#let certificates = opt(resume, "certificates")
-#if certificates != none and type(certificates) == array and certificates.len() > 0 {
+#let certificates = items(resume, "certificates")
+#if certificates.len() > 0 {
   text(weight: "bold")[Certificates]
   parbreak()
   for entry in certificates {
@@ -364,8 +324,8 @@
 }
 
 // --- Publications --------------------------------------------------
-#let publications = opt(resume, "publications")
-#if publications != none and type(publications) == array and publications.len() > 0 {
+#let publications = items(resume, "publications")
+#if publications.len() > 0 {
   text(weight: "bold")[Publications]
   parbreak()
   for entry in publications {
@@ -396,8 +356,8 @@
 }
 
 // --- Languages -----------------------------------------------------
-#let languages = opt(resume, "languages")
-#if languages != none and type(languages) == array and languages.len() > 0 {
+#let languages = items(resume, "languages")
+#if languages.len() > 0 {
   text(weight: "bold")[Languages]
   parbreak()
   for entry in languages {
@@ -419,14 +379,14 @@
 }
 
 // --- Interests -----------------------------------------------------
-#let interests = opt(resume, "interests")
-#if interests != none and type(interests) == array and interests.len() > 0 {
+#let interests = items(resume, "interests")
+#if interests.len() > 0 {
   text(weight: "bold")[Interests]
   parbreak()
   for entry in interests {
     let name = nz(opt(entry, "name"))
-    let keywords = opt(entry, "keywords")
-    let keywords_str = if keywords != none and type(keywords) == array and keywords.len() > 0 {
+    let keywords = items(entry, "keywords")
+    let keywords_str = if keywords.len() > 0 {
       keywords.filter(k => k != none and k != "").join(", ")
     } else { none }
     let line = if name != none and keywords_str != none and keywords_str != "" {
@@ -445,8 +405,8 @@
 }
 
 // --- References ----------------------------------------------------
-#let references = opt(resume, "references")
-#if references != none and type(references) == array and references.len() > 0 {
+#let references = items(resume, "references")
+#if references.len() > 0 {
   text(weight: "bold")[References]
   parbreak()
   for entry in references {
