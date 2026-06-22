@@ -152,6 +152,97 @@ fn basic_resume_renders_grace_hopper_sparse_to_expected_text() {
     );
 }
 
+// classic native-theme goldens (PDF-first; same PDF→text→normalize
+// pipeline as the adapters above, since `classic` is designed for PDF).
+#[test]
+fn classic_renders_ada_lovelace_to_expected_text() {
+    run_golden(
+        "classic",
+        "tests/fixtures/render_full.json",
+        "tests/goldens/classic.txt",
+        "Ada Lovelace",
+    );
+}
+
+#[test]
+fn classic_renders_grace_hopper_sparse_to_expected_text() {
+    run_golden(
+        "classic",
+        "tests/fixtures/render_sparse.json",
+        "tests/goldens/classic-sparse.txt",
+        "Grace Hopper",
+    );
+}
+
+/// Exercises the section renderers the two shared fixtures omit —
+/// volunteer, awards, publications, languages, references. `render_full`
+/// and `render_sparse` cover basics/work/education/projects/skills/
+/// interests/certificates; without this, those five renderers would have
+/// no golden coverage and could regress silently (testing-doctrine §2).
+/// This fixture is `classic`-scoped on purpose: extending the shared
+/// `render_full.json` would force regenerating every other theme's golden.
+#[test]
+fn classic_renders_all_sections_to_expected_text() {
+    run_golden(
+        "classic",
+        "tests/fixtures/render_sections.json",
+        "tests/goldens/classic-sections.txt",
+        "Alan Turing",
+    );
+}
+
+/// Audience-aware rendering (issue #182, exercising the `ext` accessor
+/// from #180): `classic` surfaces a `meta.x-audience` string as a
+/// "Tailored for: <label>" tagline. This is intentionally NOT a committed
+/// golden — it asserts the tagline appears (and its absence when no tag is
+/// present) by extracting the compiled PDF text, mirroring `run_golden`'s
+/// PDF→text pipeline but with inline data so no fixture/golden is needed.
+///
+/// The tag lives under `meta` (not the document root) because the JSON
+/// Resume schema forbids unknown root properties but permits `x-`
+/// extensions inside objects — so a real `ferrocv render` of such a
+/// document validates and renders the tagline.
+#[test]
+fn classic_renders_audience_tag_from_meta() {
+    let theme = ferrocv::find_theme("classic").expect("classic must be registered");
+
+    // With `meta.x-audience`, the tagline appears.
+    let tagged = serde_json::json!({
+        "meta": { "x-audience": "security" },
+        "basics": { "name": "Ada Lovelace", "label": "Engineer" },
+        "work": [ { "position": "Engineer", "name": "Acme", "startDate": "2020" } ],
+    });
+    let bytes = ferrocv::compile_theme(theme, &tagged)
+        .expect("classic must compile the audience-tagged document");
+    let text = pdf_extract::extract_text_from_mem(&bytes)
+        .expect("pdf-extract must parse the compiled PDF");
+    assert!(
+        text.contains("Tailored for: security"),
+        "a meta.x-audience tag must render as a 'Tailored for:' tagline; got:\n{text}"
+    );
+    // Exactly one tagline — guards against a renderer that duplicated it
+    // or emitted it in addition to some other (mislocated) copy.
+    assert_eq!(
+        text.matches("Tailored for:").count(),
+        1,
+        "the audience tagline must render exactly once; got:\n{text}"
+    );
+
+    // Without the tag, no tagline (and no stray 'Tailored for:' text).
+    let untagged = serde_json::json!({
+        "basics": { "name": "Ada Lovelace", "label": "Engineer" },
+        "work": [ { "position": "Engineer", "name": "Acme", "startDate": "2020" } ],
+    });
+    let bytes = ferrocv::compile_theme(theme, &untagged)
+        .expect("classic must compile the untagged document");
+    let text = pdf_extract::extract_text_from_mem(&bytes)
+        .expect("pdf-extract must parse the compiled PDF");
+    assert!(
+        !text.contains("Tailored for:"),
+        "no tagline must render when meta.x-audience is absent; got:\n{text}"
+    );
+}
+
 /// Shared golden-file workflow: compile the named adapter against the
 /// named fixture, extract and normalize the PDF text, and compare
 /// against (or rewrite, under `UPDATE_GOLDEN`) the committed golden.

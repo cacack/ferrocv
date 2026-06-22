@@ -25,7 +25,7 @@ fn themes_list_prints_sorted_names() {
         .assert()
         .success()
         .stdout(predicate::eq(
-            "basic-resume\nfantastic-cv\nhtml-minimal\nmodern-cv\ntext-minimal\ntypst-jsonresume-cv\n",
+            "basic-resume\nclassic\nfantastic-cv\nhtml-minimal\nmodern-cv\ntext-minimal\ntypst-jsonresume-cv\n",
         ))
         .stderr(predicate::str::is_empty());
 }

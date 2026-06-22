@@ -1,0 +1,36 @@
+Ada Lovelace
+ Computing Pioneer
+ada@example.com  ·  +44-20-0000-0000  ·  https://example.com/ada  ·  London, England, GB
+GitHub: ada (https://github.example.com/ada)  ·  LinkedIn: ada-lovelace (https://linkedin.example.com/in/ada-lovelace)
+
+SUMMARY
+
+Mathematician and writer, chiefly known for her work on Charles Babbage's proposed mechanical general-purpose computer, the Analytical Engine.
+EXPERIENCE
+
+Programmer, Analytical Engines Ltd 1843-01-01 - 1852-11-27
+Translated and annotated Menabrea's paper on the Analytical Engine; wrote the first published algorithm intended for machine execution. • Published the first algorithm designed for a machine (Bernoulli numbers)
+• Introduced the concept of a general-purpose computing device
+
+EDUCATION
+
+University of London 1833-01-01 - 1843-01-01
+Self-directed, Mathematics
+
+PROJECTS
+
+Notes on the Analytical Engine 1842-01-01 - 1843-07-01
+Expanded translation of Menabrea's sketch, including the first published algorithm for a computing machine.https://example.com/notes-g • Note G — the Bernoulli-number algorithm
+
+SKILLS
+
+Programming (Pioneer) : Analytical Engine, Algorithms
+Mathematics (Expert) : Calculus, Symbolic logic
+
+CERTIFICATES
+
+Honorary Fellowship in Computing History 1843-09-01
+Analytical Engines Ltdhttps://example.com/cert
+INTERESTS
+
+Poetical Science: Imagination, Mathematics

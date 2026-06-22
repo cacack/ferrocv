@@ -39,10 +39,10 @@
 //!
 //! # Why a static slice, not a `HashMap` or `ThemeRegistry`
 //!
-//! Phase 2/3 ships six themes total: four adapters
+//! Phase 2/3 ships seven themes total: four adapters
 //! (`typst-jsonresume-cv`, `fantastic-cv`, `modern-cv`, `basic-resume`)
-//! and two native themes (`text-minimal`, `html-minimal`). A linear
-//! scan over `THEMES` is O(n) for small n; CONSTITUTION §5 ("simple
+//! and three native themes (`text-minimal`, `html-minimal`, `classic`).
+//! A linear scan over `THEMES` is O(n) for small n; CONSTITUTION §5 ("simple
 //! now, iterate later") calls for the narrower solution here.
 //! Generalizing to a hashed lookup or a builder pattern should wait
 //! for a caller that actually needs it.
@@ -394,11 +394,56 @@ pub const HTML_MINIMAL: Theme = Theme {
     entrypoint: HTML_MINIMAL_RESUME_PATH,
 };
 
+/// Virtual path of the `classic` theme's entrypoint.
+///
+/// Single per-file constant shared by the [`Theme::files`] key and the
+/// [`Theme::entrypoint`] field. Like the other native themes, this uses
+/// the per-file-path-constant form rather than the adapters'
+/// `PREFIX` + `const _: () = assert!(...)` shape; see
+/// [`TEXT_MINIMAL_RESUME_PATH`] for why that divergence is deliberate.
+const CLASSIC_RESUME_PATH: &str = "/themes/classic/resume.typ";
+
+/// `classic` — a **native theme** (per CONSTITUTION §4) authored directly
+/// against the JSON Resume v1.0.0 schema via the shared prelude, and the
+/// first native theme designed to **look good as a PDF** rather than to
+/// degrade to plain text ([`TEXT_MINIMAL`]) or semantic HTML
+/// ([`HTML_MINIMAL`]). It is the proof that the prelude contract supports
+/// real layout — section rules, a title-left/dates-right entry header,
+/// bullet highlights — not just minimal output.
+///
+/// Single-column classic serif layout in "Libertinus Serif" (bundled in
+/// `typst-assets` and Typst's default, so output is reproducible with no
+/// system-font dependency — §6). It also demonstrates the prelude's `ext`
+/// accessor (#180): a `meta.x-audience` string renders as a
+/// "Tailored for: <label>" tagline (the tag lives under `meta` because the
+/// JSON Resume schema permits `x-` extensions inside objects but not at the
+/// document root).
+///
+/// `classic` is currently selected via `--theme classic`; the PDF default
+/// remains `text-minimal`. Promoting `classic` to the default PDF theme is
+/// a deliberate, user-facing change tracked as a follow-up.
+///
+/// The MIT-licensed source under `assets/themes/classic/` is also
+/// redistributable under the `ferrocv` crate's MIT-or-Apache-2.0 dual
+/// license; the file-level `LICENSE` is duplicated so the theme remains
+/// self-contained if it is ever extracted into its own package.
+pub const CLASSIC: Theme = Theme {
+    name: "classic",
+    files: &[
+        PRELUDE_FILE,
+        (
+            CLASSIC_RESUME_PATH,
+            include_bytes!("../assets/themes/classic/resume.typ"),
+        ),
+    ],
+    entrypoint: CLASSIC_RESUME_PATH,
+};
+
 /// All themes registered with this build of `ferrocv`.
 ///
 /// Phase 2/3 ships four adapters (`typst-jsonresume-cv`, `fantastic-cv`,
-/// `modern-cv`, `basic-resume`) and two native themes (`text-minimal`,
-/// `html-minimal`). See the module doc for why this is a `&[&Theme]`
+/// `modern-cv`, `basic-resume`) and three native themes (`text-minimal`,
+/// `html-minimal`, `classic`). See the module doc for why this is a `&[&Theme]`
 /// rather than a `HashMap` or a builder pattern — a linear scan over
 /// a handful of entries is fine, and CONSTITUTION §5 calls for the
 /// narrower solution until a caller actually needs more. See the
@@ -411,6 +456,7 @@ pub const THEMES: &[&Theme] = &[
     &BASIC_RESUME,
     &TEXT_MINIMAL,
     &HTML_MINIMAL,
+    &CLASSIC,
 ];
 
 /// Look up a [`Theme`] by name. Returns `None` for unknown names.

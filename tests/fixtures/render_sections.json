@@ -1,0 +1,54 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json",
+  "basics": {
+    "name": "Alan Turing",
+    "label": "Mathematician"
+  },
+  "volunteer": [
+    {
+      "organization": "Government Code and Cypher School",
+      "position": "Cryptanalyst",
+      "url": "https://example.com/gccs",
+      "startDate": "1939-09-01",
+      "endDate": "1945-08-01",
+      "summary": "Led Hut 8, responsible for German naval cryptanalysis.",
+      "highlights": [
+        "Designed the Bombe to speed Enigma decryption",
+        "Devised statistical techniques later called Banburismus"
+      ]
+    }
+  ],
+  "awards": [
+    {
+      "title": "Order of the British Empire",
+      "date": "1946-01-01",
+      "awarder": "United Kingdom",
+      "summary": "Recognized for wartime services."
+    }
+  ],
+  "publications": [
+    {
+      "name": "On Computable Numbers",
+      "publisher": "Proceedings of the London Mathematical Society",
+      "releaseDate": "1936-11-01",
+      "url": "https://example.com/computable-numbers",
+      "summary": "Introduced the universal machine and the halting problem."
+    }
+  ],
+  "languages": [
+    {
+      "language": "English",
+      "fluency": "Native speaker"
+    },
+    {
+      "language": "German",
+      "fluency": "Reading"
+    }
+  ],
+  "references": [
+    {
+      "name": "Max Newman",
+      "reference": "A mathematician of the first rank, with a rare gift for machinery."
+    }
+  ]
+}
