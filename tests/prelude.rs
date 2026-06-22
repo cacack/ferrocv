@@ -180,3 +180,82 @@ fn items_normalizes_section_access() {
         "iterating a missing section must produce no output; got:\n{text}"
     );
 }
+
+/// `ext` reads `x-<namespace>` extension fields (CONSTITUTION §1) at both
+/// the document and item level by bare namespace, and yields `none` when
+/// the namespace is absent — the negative case the issue requires, which
+/// must compile rather than error.
+#[test]
+fn ext_reads_x_namespace_fields() {
+    // Assert via `==` (nil-safe) rather than string concatenation: a
+    // missing sub-key surfaces as a failed assertion, not a Typst type
+    // error — and the test never models the unsafe `"str" + none` idiom.
+    let body = r#"
+#let data = json("/resume.json")
+
+// Document-level: read x-myorg, then chain opt for a sub-key.
+#[#(if opt(ext(data, "myorg"), "audience") == "security" { "DOC-OK" } else { "DOC-BUG" })]
+#linebreak()
+
+// Item-level: the same accessor works on a section entry's dict.
+#let first = items(data, "work").at(0)
+#[#(if opt(ext(first, "myorg"), "team") == "blue" { "ITEM-OK" } else { "ITEM-BUG" })]
+#linebreak()
+
+// Absent namespace yields none (no error) at both document and item level.
+#[#(if ext(data, "absent-ns") == none { "ABSENT-OK" } else { "ABSENT-BUG" })]
+#linebreak()
+#[#(if ext(first, "absent-ns") == none { "ITEM-ABSENT-OK" } else { "ITEM-ABSENT-BUG" })]
+#linebreak()
+
+// Non-dict `d`: the doc promises `ext` never errors when `d` is not a
+// dictionary — `none` and a plain string must both yield `none`.
+#[#(if ext(none, "myorg") == none and ext("not-a-dict", "myorg") == none { "NONDICT-OK" } else { "NONDICT-BUG" })]
+"#;
+    let data = json!({
+        "x-myorg": { "audience": "security" },
+        "work": [ { "name": "Acme", "x-myorg": { "team": "blue" } } ],
+    });
+    let text = render_with_prelude(body, &data);
+
+    assert!(
+        text.contains("DOC-OK"),
+        "ext must read a document-level x- namespace value; got:\n{text}"
+    );
+    assert!(
+        text.contains("ITEM-OK"),
+        "ext must read an item-level x- namespace value; got:\n{text}"
+    );
+    assert!(
+        text.contains("ABSENT-OK"),
+        "ext on an absent namespace must yield none (document level); got:\n{text}"
+    );
+    assert!(
+        text.contains("ITEM-ABSENT-OK"),
+        "ext on an absent namespace must yield none (item level); got:\n{text}"
+    );
+    assert!(
+        text.contains("NONDICT-OK"),
+        "ext must yield none (never error) when d is not a dict; got:\n{text}"
+    );
+}
+
+/// Negative test (issue acceptance): a document with NO `x-` fields at all
+/// compiles cleanly and every `ext` lookup returns `none`.
+#[test]
+fn ext_on_document_without_x_fields_yields_none() {
+    let body = r#"
+#let data = json("/resume.json")
+#[#(if ext(data, "myorg") == none { "NO-X-FIELDS-OK" } else { "NO-X-FIELDS-BUG" })]
+"#;
+    let data = json!({
+        "basics": { "name": "Ada" },
+        "work": [ { "name": "Acme" } ],
+    });
+    let text = render_with_prelude(body, &data);
+
+    assert!(
+        text.contains("NO-X-FIELDS-OK"),
+        "a document with no x- fields must compile and ext must yield none; got:\n{text}"
+    );
+}
