@@ -60,8 +60,15 @@ ferrocv validate resume.json
 # `--theme` is optional)
 ferrocv render resume.json
 
-# Pick a visually richer PDF theme
-ferrocv render resume.json --theme typst-jsonresume-cv --output resume.pdf
+# Pick a visually richer PDF theme: `classic` is the native PDF-first
+# theme (no external template), or use an adapter like typst-jsonresume-cv
+ferrocv render resume.json --theme classic --output resume.pdf
+
+# `classic` shows a "Tailored for: <label>" tagline when the resume's
+# `meta` object carries an `x-audience` string, e.g.
+#   { "meta": { "x-audience": "security" }, ... }
+# (the tag lives under `meta`, not the document root, because JSON Resume
+# permits `x-` extension fields inside objects but not at the top level)
 
 # Render to plain text (also defaults to `text-minimal`)
 ferrocv render resume.json --format text
