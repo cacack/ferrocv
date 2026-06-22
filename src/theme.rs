@@ -419,9 +419,10 @@ const CLASSIC_RESUME_PATH: &str = "/themes/classic/resume.typ";
 /// JSON Resume schema permits `x-` extensions inside objects but not at the
 /// document root).
 ///
-/// `classic` is currently selected via `--theme classic`; the PDF default
-/// remains `text-minimal`. Promoting `classic` to the default PDF theme is
-/// a deliberate, user-facing change tracked as a follow-up.
+/// `classic` is the default PDF theme as of issue #188 (text still defaults
+/// to `text-minimal`, HTML to `html-minimal`); the default mapping lives in
+/// `resolve_theme_name` in `src/cli.rs`. Pass `--theme text-minimal` to opt
+/// back into the extraction-tuned PDF output.
 ///
 /// The MIT-licensed source under `assets/themes/classic/` is also
 /// redistributable under the `ferrocv` crate's MIT-or-Apache-2.0 dual

@@ -336,13 +336,13 @@ fn render_text_rejects_invalid_resume_with_exit_one() {
 }
 
 #[test]
-fn render_pdf_uses_text_minimal_when_theme_omitted() {
+fn render_pdf_uses_classic_when_theme_omitted() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = tmp.path().join("out.pdf");
 
     // No `--theme`; explicit `--format pdf` (also the default). Since
-    // #52, PDF defaults to the native `text-minimal` theme like text
-    // and HTML do.
+    // #188, PDF defaults to the PDF-first native `classic` theme (text
+    // still defaults to `text-minimal`, HTML to `html-minimal`).
     ferrocv()
         .arg("render")
         .arg(fixture("render_full"))
@@ -362,11 +362,27 @@ fn render_pdf_uses_text_minimal_when_theme_omitted() {
     );
     let size = std::fs::metadata(&out).expect("stat").len();
     assert!(size > 1024, "PDF should be > 1 KiB, was {size} bytes");
+
+    // Confirm the *default* really resolved to `classic`, not just that
+    // some PDF was produced. `classic` emits uppercase section headings
+    // (e.g. `EXPERIENCE`); `text-minimal` uses title-case `Work` and has
+    // no such heading — so the heading's presence pins the default theme.
+    let bytes = std::fs::read(&out).expect("read rendered PDF");
+    let text = pdf_extract::extract_text_from_mem(&bytes).expect("extract PDF text");
+    assert!(
+        text.contains("EXPERIENCE"),
+        "default PDF must render via `classic` (expected its `EXPERIENCE` \
+         heading); got:\n{text}"
+    );
 }
 
 #[test]
 fn render_pdf_default_output_path_is_dist_resume_pdf() {
     // No `--output`, no `--theme`, no `--format` (pdf is the default).
+    // This asserts the default *output path* only; it also exercises the
+    // default PDF theme (`classic` since #188), so it depends on `classic`
+    // being registered — theme *identity* is pinned by
+    // `render_pdf_uses_classic_when_theme_omitted`.
     // `current_dir` is set to a tempdir so the default `dist/resume.pdf`
     // lands under the temp tree rather than polluting the workspace.
     let tmp = tempfile::tempdir().expect("tempdir");

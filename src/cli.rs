@@ -51,9 +51,9 @@ enum Commands {
     /// Render a JSON Resume document to PDF, plain text, or HTML via
     /// the named theme.
     ///
-    /// `--theme` is optional for all formats. PDF and text default to
-    /// `text-minimal`; HTML defaults to `html-minimal`. `--theme` also
-    /// accepts a path to a local `.typ` file — either relative
+    /// `--theme` is optional for all formats. PDF defaults to `classic`,
+    /// text defaults to `text-minimal`, HTML defaults to `html-minimal`.
+    /// `--theme` also accepts a path to a local `.typ` file — either relative
     /// (`./resume.typ`), absolute (`/abs/path/resume.typ`), or any
     /// string ending in `.typ` or containing a path separator — in
     /// which case the file's bytes are loaded at invocation time and
@@ -79,8 +79,8 @@ enum Commands {
         /// `ferrocv themes list`) resolve out of the compile-time
         /// registry; anything ending in `.typ` or containing a path
         /// separator loads from the local filesystem. Optional for
-        /// all formats: PDF and text default to `text-minimal`; HTML
-        /// defaults to `html-minimal`.
+        /// all formats: PDF defaults to `classic`, text to `text-minimal`,
+        /// HTML to `html-minimal`.
         #[arg(long)]
         theme: Option<String>,
         /// Output format: `pdf`, `text`, or `html`. Defaults to `pdf`.
@@ -294,17 +294,18 @@ enum RedactArg {
 /// Resolve which theme name to use given the format and the optional
 /// `--theme` argument.
 ///
-/// PDF and text default to the native `text-minimal` theme. HTML
-/// defaults to the semantic-HTML native theme `html-minimal`. An
-/// explicit `--theme` always wins. See CONSTITUTION §3 for why each
-/// format gets its own native default rather than a single shared
-/// anchor.
+/// PDF defaults to the native PDF-first theme `classic`; text defaults to
+/// the extraction-tuned native `text-minimal`; HTML defaults to the
+/// semantic-HTML native `html-minimal`. An explicit `--theme` always wins.
+/// See CONSTITUTION §3 for why each format gets its own native default
+/// rather than a single shared anchor.
 fn resolve_theme_name(format: Format, requested: Option<&str>) -> &str {
     match requested {
         Some(name) => name,
         None => match format {
+            Format::Pdf => "classic",
+            Format::Text => "text-minimal",
             Format::Html => "html-minimal",
-            Format::Pdf | Format::Text => "text-minimal",
         },
     }
 }
@@ -578,9 +579,9 @@ fn run_render(
     }
 
     // Step 1: resolve theme name first. Every format now has a default
-    // (`text-minimal` for PDF/text, `html-minimal` for HTML), so this
-    // is infallible — an explicit `--theme` overrides, otherwise the
-    // native default applies.
+    // (`classic` for PDF, `text-minimal` for text, `html-minimal` for
+    // HTML), so this is infallible — an explicit `--theme` overrides,
+    // otherwise the native default applies.
     let theme_name = resolve_theme_name(format, theme_name);
 
     // Step 2: read input. IO failures bubble up via anyhow and main
@@ -811,5 +812,36 @@ fn read_input(path: Option<&Path>) -> Result<String> {
             std::fs::read_to_string(p).with_context(|| format!("failed to read {}", p.display()))
         }
         None => std::io::read_to_string(std::io::stdin()).context("failed to read JSON from stdin"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The per-format native defaults (issue #188): PDF renders via the
+    /// PDF-first `classic` theme, while text and HTML keep their
+    /// extraction- and semantic-HTML-tuned defaults. CONSTITUTION §3:
+    /// each format gets its own native default.
+    #[test]
+    fn resolve_theme_name_uses_per_format_native_defaults() {
+        assert_eq!(resolve_theme_name(Format::Pdf, None), "classic");
+        assert_eq!(resolve_theme_name(Format::Text, None), "text-minimal");
+        assert_eq!(resolve_theme_name(Format::Html, None), "html-minimal");
+    }
+
+    /// An explicit `--theme` always wins over the per-format default,
+    /// for every format.
+    #[test]
+    fn resolve_theme_name_explicit_request_wins() {
+        assert_eq!(
+            resolve_theme_name(Format::Pdf, Some("text-minimal")),
+            "text-minimal"
+        );
+        assert_eq!(resolve_theme_name(Format::Text, Some("classic")), "classic");
+        assert_eq!(
+            resolve_theme_name(Format::Html, Some("typst-jsonresume-cv")),
+            "typst-jsonresume-cv"
+        );
     }
 }

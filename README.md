@@ -18,9 +18,9 @@ Render [JSON Resume](https://jsonresume.org/) to PDF, HTML, and text via
 ## Status
 
 **Early.** PDF, plain-text, and HTML output all work today (PDF via
-any registered PDF-capable theme, plain text via the native
-`text-minimal` default, and HTML via the native `html-minimal`
-semantic theme). Additional themes and native-theme
+the native PDF-first `classic` default or any registered theme, plain
+text via the native `text-minimal` default, and HTML via the native
+`html-minimal` semantic theme). Additional themes and native-theme
 tooling are tracked as
 [GitHub issues](https://github.com/cacack/ferrocv/issues) and
 organized into phase milestones. HTML uses Typst's upstream-experimental
@@ -56,13 +56,15 @@ schema and replaces the rendering pipeline with something more robust:
 # Validate a resume against the JSON Resume schema
 ferrocv validate resume.json
 
-# Render to PDF (defaults to the native `text-minimal` theme;
+# Render to PDF (defaults to the native PDF-first `classic` theme;
 # `--theme` is optional)
 ferrocv render resume.json
 
-# Pick a visually richer PDF theme: `classic` is the native PDF-first
-# theme (no external template), or use an adapter like typst-jsonresume-cv
-ferrocv render resume.json --theme classic --output resume.pdf
+# Keep the previous extraction-tuned PDF default (pre-v0.9 `text-minimal`)
+ferrocv render resume.json --theme text-minimal --output resume.pdf
+
+# Or use an adapter that wraps an upstream Typst Universe template
+ferrocv render resume.json --theme typst-jsonresume-cv --output resume.pdf
 
 # `classic` shows a "Tailored for: <label>" tagline when the resume's
 # `meta` object carries an `x-audience` string, e.g.
@@ -70,7 +72,7 @@ ferrocv render resume.json --theme classic --output resume.pdf
 # (the tag lives under `meta`, not the document root, because JSON Resume
 # permits `x-` extension fields inside objects but not at the top level)
 
-# Render to plain text (also defaults to `text-minimal`)
+# Render to plain text (defaults to `text-minimal`)
 ferrocv render resume.json --format text
 
 # Render to HTML (defaults to the native `html-minimal` semantic theme).
@@ -97,8 +99,10 @@ on every push via GitHub Actions (using the `setup-ferrocv` composite
 action below) and publishes the result to GitHub Pages.
 
 `render` defaults to `--format pdf`. `--theme` is optional for every
-format: PDF and text default to the native `text-minimal` theme, while
-HTML defaults to the native `html-minimal` semantic theme. When
+format: PDF defaults to the native PDF-first `classic` theme, text to
+the native `text-minimal` theme, and HTML to the native `html-minimal`
+semantic theme. (The PDF default became `classic` in v0.9; if you relied
+on the older extraction-tuned PDF, pass `--theme text-minimal`.) When
 `--output` is omitted, the output lands at `dist/resume.pdf` for PDF,
 `dist/resume.txt` for text, and `dist/resume.html` for HTML; parent
 directories are created as needed. `validate`, `render`, and `tailor`
