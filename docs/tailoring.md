@@ -48,7 +48,7 @@ There is **one** projection transform behind **two** CLI surfaces:
   renders in one shot:
 
   ```sh
-  ferrocv render examples/master.resume.json --audience security --theme text-minimal -o security.pdf
+  ferrocv render examples/master.resume.json --audience security -o security.pdf
   ```
 
 These two are equivalent by construction — `render --audience security` is

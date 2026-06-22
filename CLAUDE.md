@@ -54,9 +54,11 @@ strings there are kept in lockstep with `.github/workflows/ci.yml`.
     `assets/themes/<name>/` — each with its own `VENDORING.md` recording
     upstream SHA and any patches (e.g. `modern-cv` was patched to drop
     `@preview/fontawesome` and `@preview/linguify`).
-  - *Native themes* (currently just `text-minimal`) author Typst
-    directly against the JSON Resume schema; this is what
-    `--format text` and `--format html` default to.
+  - *Native themes* (`text-minimal`, `html-minimal`, `classic`) author
+    Typst directly against the JSON Resume schema via the shared prelude
+    (`assets/themes/_prelude/lib.typ`). Each format defaults to one:
+    `--format pdf` → `classic`, `--format text` → `text-minimal`,
+    `--format html` → `html-minimal`.
 - **Schema embedding.** `assets/schema/jsonresume-v1.0.0.json` is
   vendored and baked into the binary via `include_str!` in `src/lib.rs`.
   `jsonschema` is built without default features to avoid pulling
