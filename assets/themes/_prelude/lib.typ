@@ -77,3 +77,32 @@
   let v = opt(d, key)
   if v != none and type(v) == array { v } else { () }
 }
+
+// --- Extension fields (`x-` namespaces) ----------------------------
+
+// Read a JSON Resume `x-<namespace>` extension field — CONSTITUTION §1's
+// only sanctioned extension point — from any dict `d` (the whole
+// document or a single section item). `namespace` is the bare name
+// WITHOUT the `x-` prefix, so themes never hardcode the literal key
+// string. Returns the field value (often itself a dict) or `none` when
+// the namespace is absent or `d` is not a dict — never errors (JSON
+// Resume has zero required fields).
+//
+// Worked example — badge a highlight an author tagged for an audience:
+//   #let tag = opt(ext(entry, "myorg"), "audience")  // none if absent
+//   #if tag != none { /* render a badge, reorder, etc. */ }
+//
+// Sub-keys are read by chaining `opt` (as above), NOT via dot-notation or
+// a second argument — both of these silently return `none`:
+//   ext(d, "myorg.audience")  // WRONG: reads the literal key "x-myorg.audience"
+//   ext(d, "x-myorg")         // WRONG: double-prefixes to "x-x-myorg"
+// (A dedicated sub-key parameter can be added when a second caller needs
+// it — CONSTITUTION §5.)
+//
+// The `ferrocv` namespace is RESERVED for ferrocv's own use — do not read
+// or write `x-ferrocv` from a theme. ferrocv's projection (§7) consumes
+// and strips its `x-ferrocv` control keys from a derived document
+// (`src/project.rs`), so `ext(d, "ferrocv")` yields `none` on projected
+// output by design. This accessor is for author-defined namespaces a
+// theme chooses to honor, not ferrocv's internal projection metadata.
+#let ext(d, namespace) = opt(d, "x-" + namespace)
