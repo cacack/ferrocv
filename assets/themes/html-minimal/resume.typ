@@ -17,49 +17,16 @@
 //   stylesheets, no web fonts, no inline style attributes, no
 //   sourced sub-resources. Resume data never leaves the process.
 // - Defensive optional-field reads — JSON Resume v1.0.0 has zero
-//   required fields; every accessor must tolerate missing keys.
-//   The helper block is duplicated from `text-minimal` rather than
-//   shared; CONSTITUTION §5 says share on the third caller.
+//   required fields; every accessor must tolerate missing keys. The
+//   helpers (`opt`, `nz`, `join_present`, `date_range`) and section
+//   accessor (`items`) come from the shared native-theme prelude
+//   (CONSTITUTION §4); this theme contributes only layout.
 //
 // Typed-HTML API reference: https://typst.app/docs/reference/html/
 
+#import "/themes/_prelude/lib.typ": *
+
 #let resume = json("/resume.json")
-
-// --- Optional-field helpers ----------------------------------------
-//
-// `opt(d, k)` returns `d.at(k)` if `d` is a dictionary and `k` is
-// present, otherwise `none`. Lets per-section code stay readable
-// without sprinkling `if "x" in d { ... }` everywhere.
-#let opt(d, k) = if type(d) == dictionary and k in d { d.at(k) } else { none }
-
-// `nz(s)` collapses both absent and empty-string values to `none` so
-// sections can uniformly check `if value != none`.
-#let nz(s) = if s == none or s == "" { none } else { s }
-
-// Join a list of optional strings with `sep`, dropping `none`/empty.
-// Used for location ("city, region, country") where any subset of
-// components may be missing.
-#let join_present(parts, sep) = {
-  let kept = parts.filter(p => p != none and p != "")
-  kept.join(sep)
-}
-
-// Format a date range. Either bound may be missing; an absent
-// `endDate` becomes "Present". Returns `none` if both are absent so
-// the caller can skip the line entirely.
-#let date_range(item) = {
-  let start = nz(opt(item, "startDate"))
-  let end = nz(opt(item, "endDate"))
-  if start == none and end == none {
-    none
-  } else if start != none and end != none {
-    start + " - " + end
-  } else if start != none {
-    start + " - Present"
-  } else {
-    end
-  }
-}
 
 // --- Document ------------------------------------------------------
 //
@@ -108,8 +75,8 @@
       // Treated as header continuation rather than a separate section
       // so the rendering matches how social profiles read on a real
       // resume.
-      #let profiles = opt(basics, "profiles")
-      #if profiles != none and type(profiles) == array and profiles.len() > 0 {
+      #let profiles = items(basics, "profiles")
+      #if profiles.len() > 0 {
         html.ul[
           #for profile in profiles {
             let network = nz(opt(profile, "network"))
@@ -145,8 +112,8 @@
   }
 
   // --- Work --------------------------------------------------------
-  #let work = opt(resume, "work")
-  #if work != none and type(work) == array and work.len() > 0 {
+  #let work = items(resume, "work")
+  #if work.len() > 0 {
     html.section[
       #html.h2[Work]
       #for entry in work {
@@ -175,16 +142,13 @@
           #if work_summary != none {
             html.p[#work_summary]
           }
-          #let highlights = opt(entry, "highlights")
-          #if highlights != none and type(highlights) == array {
-            let kept = highlights.filter(h => h != none and h != "")
-            if kept.len() > 0 {
-              html.ul[
-                #for h in kept {
-                  html.li[#h]
-                }
-              ]
-            }
+          #let kept = items(entry, "highlights").filter(h => h != none and h != "")
+          #if kept.len() > 0 {
+            html.ul[
+              #for h in kept {
+                html.li[#h]
+              }
+            ]
           }
         ]
       }
@@ -192,8 +156,8 @@
   }
 
   // --- Volunteer ---------------------------------------------------
-  #let volunteer = opt(resume, "volunteer")
-  #if volunteer != none and type(volunteer) == array and volunteer.len() > 0 {
+  #let volunteer = items(resume, "volunteer")
+  #if volunteer.len() > 0 {
     html.section[
       #html.h2[Volunteer]
       #for entry in volunteer {
@@ -222,16 +186,13 @@
           #if v_summary != none {
             html.p[#v_summary]
           }
-          #let highlights = opt(entry, "highlights")
-          #if highlights != none and type(highlights) == array {
-            let kept = highlights.filter(h => h != none and h != "")
-            if kept.len() > 0 {
-              html.ul[
-                #for h in kept {
-                  html.li[#h]
-                }
-              ]
-            }
+          #let kept = items(entry, "highlights").filter(h => h != none and h != "")
+          #if kept.len() > 0 {
+            html.ul[
+              #for h in kept {
+                html.li[#h]
+              }
+            ]
           }
         ]
       }
@@ -239,8 +200,8 @@
   }
 
   // --- Education ---------------------------------------------------
-  #let education = opt(resume, "education")
-  #if education != none and type(education) == array and education.len() > 0 {
+  #let education = items(resume, "education")
+  #if education.len() > 0 {
     html.section[
       #html.h2[Education]
       #for entry in education {
@@ -269,8 +230,8 @@
   }
 
   // --- Awards ------------------------------------------------------
-  #let awards = opt(resume, "awards")
-  #if awards != none and type(awards) == array and awards.len() > 0 {
+  #let awards = items(resume, "awards")
+  #if awards.len() > 0 {
     html.section[
       #html.h2[Awards]
       #for entry in awards {
@@ -289,16 +250,13 @@
           #if a_summary != none {
             html.p[#a_summary]
           }
-          #let highlights = opt(entry, "highlights")
-          #if highlights != none and type(highlights) == array {
-            let kept = highlights.filter(h => h != none and h != "")
-            if kept.len() > 0 {
-              html.ul[
-                #for h in kept {
-                  html.li[#h]
-                }
-              ]
-            }
+          #let kept = items(entry, "highlights").filter(h => h != none and h != "")
+          #if kept.len() > 0 {
+            html.ul[
+              #for h in kept {
+                html.li[#h]
+              }
+            ]
           }
         ]
       }
@@ -306,8 +264,8 @@
   }
 
   // --- Certificates ------------------------------------------------
-  #let certificates = opt(resume, "certificates")
-  #if certificates != none and type(certificates) == array and certificates.len() > 0 {
+  #let certificates = items(resume, "certificates")
+  #if certificates.len() > 0 {
     html.section[
       #html.h2[Certificates]
       #for entry in certificates {
@@ -332,8 +290,8 @@
   }
 
   // --- Publications ------------------------------------------------
-  #let publications = opt(resume, "publications")
-  #if publications != none and type(publications) == array and publications.len() > 0 {
+  #let publications = items(resume, "publications")
+  #if publications.len() > 0 {
     html.section[
       #html.h2[Publications]
       #for entry in publications {
@@ -362,16 +320,16 @@
   }
 
   // --- Skills ------------------------------------------------------
-  #let skills = opt(resume, "skills")
-  #if skills != none and type(skills) == array and skills.len() > 0 {
+  #let skills = items(resume, "skills")
+  #if skills.len() > 0 {
     html.section[
       #html.h2[Skills]
       #html.ul[
         #for skill in skills {
           let name = nz(opt(skill, "name"))
           let level = nz(opt(skill, "level"))
-          let keywords = opt(skill, "keywords")
-          let keywords_str = if keywords != none and type(keywords) == array and keywords.len() > 0 {
+          let keywords = items(skill, "keywords")
+          let keywords_str = if keywords.len() > 0 {
             keywords.filter(k => k != none and k != "").join(", ")
           } else { none }
           let label_part = if name != none and level != none {
@@ -397,8 +355,8 @@
   }
 
   // --- Languages ---------------------------------------------------
-  #let languages = opt(resume, "languages")
-  #if languages != none and type(languages) == array and languages.len() > 0 {
+  #let languages = items(resume, "languages")
+  #if languages.len() > 0 {
     html.section[
       #html.h2[Languages]
       #html.ul[
@@ -421,15 +379,15 @@
   }
 
   // --- Interests ---------------------------------------------------
-  #let interests = opt(resume, "interests")
-  #if interests != none and type(interests) == array and interests.len() > 0 {
+  #let interests = items(resume, "interests")
+  #if interests.len() > 0 {
     html.section[
       #html.h2[Interests]
       #html.ul[
         #for entry in interests {
           let name = nz(opt(entry, "name"))
-          let keywords = opt(entry, "keywords")
-          let keywords_str = if keywords != none and type(keywords) == array and keywords.len() > 0 {
+          let keywords = items(entry, "keywords")
+          let keywords_str = if keywords.len() > 0 {
             keywords.filter(k => k != none and k != "").join(", ")
           } else { none }
           let line = if name != none and keywords_str != none and keywords_str != "" {
@@ -448,8 +406,8 @@
   }
 
   // --- Projects ----------------------------------------------------
-  #let projects = opt(resume, "projects")
-  #if projects != none and type(projects) == array and projects.len() > 0 {
+  #let projects = items(resume, "projects")
+  #if projects.len() > 0 {
     html.section[
       #html.h2[Projects]
       #for entry in projects {
@@ -476,8 +434,8 @@
   }
 
   // --- References --------------------------------------------------
-  #let references = opt(resume, "references")
-  #if references != none and type(references) == array and references.len() > 0 {
+  #let references = items(resume, "references")
+  #if references.len() > 0 {
     html.section[
       #html.h2[References]
       #for entry in references {

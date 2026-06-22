@@ -19,7 +19,8 @@ pub use render::{
     compile_text_resolved, compile_theme, compile_theme_resolved,
 };
 pub use theme::{
-    OwnedTheme, ResolvedTheme, THEMES, Theme, ThemeResolveError, find_theme, resolve_theme,
+    OwnedTheme, PRELUDE_PATH, ResolvedTheme, THEMES, Theme, ThemeResolveError, find_theme,
+    resolve_theme,
 };
 pub use validate::{ValidationError, validate_value};
 

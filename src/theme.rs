@@ -25,14 +25,17 @@
 //!
 //! Per CONSTITUTION §4 the two layers are kept separable: adapter
 //! code does not leak into native themes, and native themes do not
-//! depend on adapter internals. §4 also promises that native themes
-//! will eventually live in a dedicated module. For Phase 2, with two
-//! small native themes colocated here (`text-minimal` and
-//! `html-minimal`), splitting into a dedicated module would add
-//! scaffolding without saving anything — the themes share no Rust
-//! code, only a registration pattern. Extract when shared
-//! native-theme infrastructure actually warrants it (CONSTITUTION §5:
-//! "simple now, iterate later").
+//! depend on adapter internals. The native-theme contract itself is a
+//! shared **Typst** prelude (`assets/themes/_prelude/lib.typ`, served
+//! at [`PRELUDE_PATH`]): `text-minimal` and `html-minimal` `#import` it
+//! for optional-field helpers and section accessors, so they share data
+//! access while each keeps its own format-specific layout. They still
+//! share no *Rust* code — only the registration pattern below. §4 also
+//! promises that native themes will eventually live in a dedicated
+//! module; for Phase 2, with two small native themes colocated here,
+//! splitting would add scaffolding without saving anything. Extract
+//! when shared native-theme infrastructure actually warrants it
+//! (CONSTITUTION §5: "simple now, iterate later").
 //!
 //! # Why a static slice, not a `HashMap` or `ThemeRegistry`
 //!
@@ -265,6 +268,37 @@ const _: () = {
     assert!(!BASIC_RESUME_PREFIX.is_empty());
 };
 
+/// Virtual path of the shared native-theme prelude (CONSTITUTION §4).
+///
+/// The prelude (`assets/themes/_prelude/lib.typ`) is first-party ferrocv
+/// source — not a vendored upstream — bundled into every **native**
+/// theme that opts into the contract by `#import`ing it. It exposes the
+/// optional-field helpers (`opt`, `nz`, `join_present`, `date_range`)
+/// and normalized section accessors (`items`) that `text-minimal` and
+/// `html-minimal` previously copy-pasted. Interning the file into each
+/// native theme's [`Theme::files`] is what makes the absolute import
+/// (`#import "/themes/_prelude/lib.typ": *`) resolve inside
+/// [`crate::render::FerrocvWorld`]. Adapters do not carry it — they wrap
+/// upstream templates and never touch the native contract, keeping the
+/// two layers separable (§4).
+///
+/// Exported so callers building a [`OwnedTheme`] programmatically (and
+/// the prelude's own contract test) reference the canonical path rather
+/// than re-hardcoding the literal — a rename then surfaces as a Rust
+/// compile error at every call site instead of a confusing Typst
+/// "file not found" at render time.
+pub const PRELUDE_PATH: &str = "/themes/_prelude/lib.typ";
+
+/// `(virtual_path, bytes)` entry for the shared prelude.
+///
+/// Identical in both native themes, so it is centralized here rather
+/// than repeated. `include_bytes!` bakes the source into the binary at
+/// compile time (no filesystem access at render time — §6.1).
+const PRELUDE_FILE: (&str, &[u8]) = (
+    PRELUDE_PATH,
+    include_bytes!("../assets/themes/_prelude/lib.typ"),
+);
+
 /// Virtual path of the `text-minimal` theme's entrypoint.
 ///
 /// Single per-file constant used by both the [`Theme::files`] key and
@@ -310,10 +344,13 @@ const TEXT_MINIMAL_RESUME_PATH: &str = "/themes/text-minimal/resume.typ";
 /// later"). See the module-level doc for the full rationale.
 pub const TEXT_MINIMAL: Theme = Theme {
     name: "text-minimal",
-    files: &[(
-        TEXT_MINIMAL_RESUME_PATH,
-        include_bytes!("../assets/themes/text-minimal/resume.typ"),
-    )],
+    files: &[
+        PRELUDE_FILE,
+        (
+            TEXT_MINIMAL_RESUME_PATH,
+            include_bytes!("../assets/themes/text-minimal/resume.typ"),
+        ),
+    ],
     entrypoint: TEXT_MINIMAL_RESUME_PATH,
 };
 
@@ -347,10 +384,13 @@ const HTML_MINIMAL_RESUME_PATH: &str = "/themes/html-minimal/resume.typ";
 /// package.
 pub const HTML_MINIMAL: Theme = Theme {
     name: "html-minimal",
-    files: &[(
-        HTML_MINIMAL_RESUME_PATH,
-        include_bytes!("../assets/themes/html-minimal/resume.typ"),
-    )],
+    files: &[
+        PRELUDE_FILE,
+        (
+            HTML_MINIMAL_RESUME_PATH,
+            include_bytes!("../assets/themes/html-minimal/resume.typ"),
+        ),
+    ],
     entrypoint: HTML_MINIMAL_RESUME_PATH,
 };
 
