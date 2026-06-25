@@ -52,10 +52,13 @@
 //! - **§6.4 — Themes run under Typst's native sandbox, nothing more.**
 //!   We do not add filesystem-wide access, shell-escape, or any
 //!   custom capabilities. The World exposes exactly the virtual
-//!   files the caller registers plus the always-present
-//!   `/resume.json` slot wired to the caller-supplied JSON Resume
-//!   bytes. HTML compilation gains no new capabilities; it only
-//!   selects a different compile target inside the same sandbox.
+//!   files the caller registers, plus two always-present slots: the
+//!   `/resume.json` document wired to the caller-supplied JSON Resume
+//!   bytes, and the first-party native-theme prelude at
+//!   `/themes/_prelude/lib.typ` (baked in, so any theme can `#import`
+//!   the contract without carrying its own copy). HTML compilation
+//!   gains no new capabilities; it only selects a different compile
+//!   target inside the same sandbox.
 //!
 //! # Experimental upstream status
 //!
@@ -801,13 +804,28 @@ impl FerrocvWorld {
     }
 
     /// Common tail of both constructors — wires the `/resume.json`
-    /// slot from `data` and returns the assembled World.
+    /// slot from `data`, injects the shared native-theme prelude, and
+    /// returns the assembled World.
+    ///
+    /// The prelude (`crate::theme::PRELUDE_PATH`) is served in **every**
+    /// World so any theme — bundled, programmatic [`OwnedTheme`], or a
+    /// local single-file `.typ` (including ones `ferrocv themes new`
+    /// emits) — can `#import "/themes/_prelude/lib.typ"`. `or_insert`
+    /// makes it idempotent: bundled native themes that already carry the
+    /// prelude in their `files` keep their (byte-identical) entry, while
+    /// themes that don't gain it for free. The bytes are baked in at
+    /// compile time, so this adds no IO and keeps render offline (§6.1).
     fn assemble(
         entrypoint: FileId,
         entrypoint_source: Source,
-        theme_files: HashMap<FileId, Bytes>,
+        mut theme_files: HashMap<FileId, Bytes>,
         data: &Value,
     ) -> Self {
+        let prelude_id = project_file_id(crate::theme::PRELUDE_PATH);
+        theme_files
+            .entry(prelude_id)
+            .or_insert_with(|| Bytes::new(crate::theme::PRELUDE_BYTES));
+
         let resume_id = project_file_id(RESUME_JSON_PATH);
         // `serde_json::to_vec` is infallible for `Value` — the Value
         // tree by construction never fails to serialize. Unwrap is

@@ -165,6 +165,40 @@ enum Commands {
 enum ThemesCommands {
     /// List registered theme names, one per line, sorted.
     List,
+    /// Scaffold a starter native theme wired to the shared prelude.
+    ///
+    /// Writes a new directory `<name>/` (under the current directory,
+    /// or under `--out <dir>`) containing a ready-to-edit `resume.typ`
+    /// that `#import`s ferrocv's native-theme prelude
+    /// (`/themes/_prelude/lib.typ`) and renders the major JSON Resume
+    /// sections, plus a `golden.txt` test stub. The generated theme
+    /// renders straight away — point `render --theme` at the emitted
+    /// file:
+    ///
+    /// ```text
+    /// ferrocv themes new mytheme
+    /// ferrocv render resume.json --theme mytheme/resume.typ -o out.pdf
+    /// ```
+    ///
+    /// `<name>` must be a bare directory name: letters, digits, `-`,
+    /// and `_` only (no path separators, no `..`), so it can never
+    /// escape the target directory. The command refuses to write into
+    /// an existing target — it never clobbers; remove the directory or
+    /// pick another name to re-run.
+    ///
+    /// Exit codes:
+    /// - 0: theme scaffolded.
+    /// - 2: invalid name, target already exists, or IO error.
+    New {
+        /// Name of the theme to scaffold. Becomes the new directory's
+        /// name; letters, digits, `-`, and `_` only.
+        name: String,
+        /// Parent directory to create `<name>/` inside. Defaults to the
+        /// current directory. Created if missing, including any
+        /// intermediate directories.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Download a Typst Universe package into the local cache so
     /// later `render` invocations can resolve `@preview/<name>:<version>`
     /// offline.
@@ -350,6 +384,7 @@ pub fn run() -> Result<ExitCode> {
         } => run_tailor(path.as_deref(), &projection.to_spec(), output.as_deref()),
         Commands::Themes { command } => match command {
             ThemesCommands::List => run_themes_list(),
+            ThemesCommands::New { name, out } => run_themes_new(&name, out.as_deref()),
             #[cfg(feature = "install")]
             ThemesCommands::Install { spec } => run_themes_install(&spec),
         },
@@ -520,6 +555,143 @@ fn run_themes_list() -> Result<ExitCode> {
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+// --- `themes new` scaffold -------------------------------------------
+// The two emitted-file constants, then the validation + write logic.
+
+/// Starter `resume.typ` emitted by `ferrocv themes new`. Baked in at
+/// compile time so the scaffold needs no filesystem access to its own
+/// templates and stays in lockstep with the prelude it imports.
+const SCAFFOLD_RESUME_TYP: &str = include_str!("../assets/scaffold/resume.typ");
+
+/// Placeholder golden-test stub emitted alongside the theme. A real
+/// golden is a verbatim text extraction of the rendered output; the
+/// scaffold can't render at write time (no Typst here), so it drops a
+/// placeholder the author overwrites once the theme renders the way
+/// they want (testing doctrine §2).
+const SCAFFOLD_GOLDEN_STUB: &str = "\
+ferrocv golden-test stub — replace this file.
+
+A golden file is a committed, verbatim copy of your theme's rendered
+text output, so a future change that alters the output shows up as a
+diff you must explain (CONSTITUTION testing doctrine §2). Generate one
+by rendering a fixture to text and saving the extraction here, e.g.:
+
+    ferrocv render resume.json --theme resume.typ --format text -o golden.txt
+
+then commit it next to the theme and diff against it in your tests.
+";
+
+/// Validate a scaffold theme name: a bare directory component made of
+/// ASCII letters, digits, `-`, or `_`. Rejects empty, path separators,
+/// `.`/`..`, and anything else that could escape the target directory
+/// or produce a surprising path. Mirrors the "no separators, no `.typ`"
+/// constraint bundled theme names already satisfy.
+fn validate_theme_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("theme name must not be empty".to_owned());
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!(
+            "invalid theme name `{name}`: use ASCII letters, digits, `-`, or `_` only \
+             (no path separators or dots)"
+        ));
+    }
+    Ok(())
+}
+
+/// Run `ferrocv themes new <name>`.
+///
+/// Scaffolds `<base>/<name>/` (base = `out`, or the current directory)
+/// with a ready-to-edit `resume.typ` and a `golden.txt` stub. Refuses
+/// to write into an existing target so it never clobbers user work. All
+/// diagnostics go to stderr; the success path prints the created paths
+/// and a render hint to stdout. Exit 2 on any failure.
+fn run_themes_new(name: &str, out: Option<&Path>) -> Result<ExitCode> {
+    if let Err(msg) = validate_theme_name(name) {
+        eprintln!("error: {msg}");
+        return Ok(ExitCode::from(2));
+    }
+
+    // Target is `<out>/<name>`, or just `<name>` (relative to the cwd)
+    // when `--out` is omitted — keeping the path relative so the printed
+    // render hint is portable rather than an absolute, machine-specific
+    // path the user might paste into a shared script.
+    let target = match out {
+        Some(dir) => dir.join(name),
+        None => PathBuf::from(name),
+    };
+
+    // Create any missing ancestors of the target first (so `--out
+    // some/new/dir` works), but NOT the target itself — that we create
+    // exclusively below. When `--out` is omitted the parent is the cwd
+    // (an empty `""` component), which already exists, so skip it.
+    if let Some(parent) = target.parent()
+        && !parent.as_os_str().is_empty()
+        && let Err(err) = std::fs::create_dir_all(parent)
+    {
+        eprintln!("error: failed to create {}: {err}", parent.display());
+        return Ok(ExitCode::from(2));
+    }
+
+    // Exclusive create: `create_dir` (not `create_dir_all`) fails with
+    // `AlreadyExists` if anything — a dir, file, or even a dangling
+    // symlink — already occupies the path. That gives us refuse-if-exists
+    // AND closes the TOCTOU window a separate "check then create" pair
+    // would open (where a symlink planted in the gap could redirect our
+    // writes). After this returns Ok the directory is one we just made,
+    // so the rollback below is safe.
+    if let Err(err) = std::fs::create_dir(&target) {
+        if err.kind() == std::io::ErrorKind::AlreadyExists {
+            eprintln!(
+                "error: target already exists: {} (remove it or choose another name)",
+                target.display()
+            );
+        } else {
+            eprintln!("error: failed to create {}: {err}", target.display());
+        }
+        return Ok(ExitCode::from(2));
+    }
+
+    // Roll the freshly-created directory back on any write failure so a
+    // half-written scaffold doesn't strand the user behind the
+    // refuse-if-exists guard on their next attempt.
+    if let Err(err) = write_scaffold_files(&target) {
+        eprintln!("error: {err}");
+        let _ = std::fs::remove_dir_all(&target);
+        return Ok(ExitCode::from(2));
+    }
+
+    let resume_path = target.join("resume.typ");
+    println!("Scaffolded native theme `{name}`:");
+    println!("  {}", resume_path.display());
+    println!("  {}", target.join("golden.txt").display());
+    println!();
+    println!("Render it with:");
+    println!(
+        "  ferrocv render resume.json --theme {} -o out.pdf",
+        resume_path.display()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Write the scaffold's files into an already-created `target` dir.
+/// Split out so the caller can roll the directory back on the first
+/// failure without duplicating per-file error plumbing.
+fn write_scaffold_files(target: &Path) -> Result<(), String> {
+    for (name, contents) in [
+        ("resume.typ", SCAFFOLD_RESUME_TYP),
+        ("golden.txt", SCAFFOLD_GOLDEN_STUB),
+    ] {
+        let path = target.join(name);
+        std::fs::write(&path, contents)
+            .map_err(|err| format!("failed to write {}: {err}", path.display()))?;
+    }
+    Ok(())
 }
 
 fn run_validate(path: Option<&Path>) -> Result<ExitCode> {
