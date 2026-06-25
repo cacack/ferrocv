@@ -83,6 +83,9 @@ ferrocv render resume.json --format html
 # List bundled themes (machine-readable, one name per line)
 ferrocv themes list
 
+# Scaffold a starter native theme to author your own
+ferrocv themes new mytheme
+
 # Project a master resume into a narrower cut (mechanical filters):
 # drop roles that ended before 2015, cap each job at 4 bullets, and
 # strip PII. Writes the derived JSON Resume to stdout (or use -o).
@@ -165,6 +168,25 @@ for unattended or shared/recorded contexts.
 `themes list` prints registered theme names to stdout, one per line,
 sorted lexicographically, with no decoration — a stable
 machine-readable contract.
+
+`themes new <name>` scaffolds a starter native theme to author your own.
+It writes a new `<name>/` directory (in the current directory, or under
+`--out <dir>`) containing a ready-to-edit `resume.typ` and a `golden.txt`
+test stub. The emitted `resume.typ` `#import`s ferrocv's shared
+native-theme prelude and renders the major JSON Resume sections, so it
+renders straight away — point `render --theme` at the file:
+
+```sh
+ferrocv themes new mytheme
+ferrocv render resume.json --theme mytheme/resume.typ --output resume.pdf
+```
+
+`<name>` must be a bare directory name (letters, digits, `-`, `_`; no
+leading `-`, no path separators or `..`), and the command refuses to
+write into an existing target rather than clobber it. A fuller authoring
+walkthrough is
+tracked separately; for now the generated file's comments and the bundled
+`classic` theme are the reference.
 
 `themes install` resolves transitive `@preview/...` dependencies
 recursively: installing one package also fetches every `@preview/...`

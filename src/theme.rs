@@ -271,16 +271,17 @@ const _: () = {
 /// Virtual path of the shared native-theme prelude (CONSTITUTION §4).
 ///
 /// The prelude (`assets/themes/_prelude/lib.typ`) is first-party ferrocv
-/// source — not a vendored upstream — bundled into every **native**
-/// theme that opts into the contract by `#import`ing it. It exposes the
-/// optional-field helpers (`opt`, `nz`, `join_present`, `date_range`)
-/// and normalized section accessors (`items`) that `text-minimal` and
-/// `html-minimal` previously copy-pasted. Interning the file into each
-/// native theme's [`Theme::files`] is what makes the absolute import
-/// (`#import "/themes/_prelude/lib.typ": *`) resolve inside
-/// [`crate::render::FerrocvWorld`]. Adapters do not carry it — they wrap
-/// upstream templates and never touch the native contract, keeping the
-/// two layers separable (§4).
+/// source — not a vendored upstream — exposing the optional-field
+/// helpers (`opt`, `nz`, `join_present`, `date_range`) and normalized
+/// section accessors (`items`) that native themes build layout on. The
+/// absolute import `#import "/themes/_prelude/lib.typ": *` resolves
+/// because [`crate::render::FerrocvWorld`] serves the prelude bytes at
+/// this path in **every** World it builds (see
+/// [`crate::theme::PRELUDE_BYTES`]) — so bundled native themes,
+/// programmatic [`OwnedTheme`]s, and local single-file `.typ` themes
+/// (including ones emitted by `ferrocv themes new`) can all import the
+/// contract without each having to carry a copy of the file. Adapters
+/// simply never reference it, keeping the two layers separable (§4).
 ///
 /// Exported so callers building a [`OwnedTheme`] programmatically (and
 /// the prelude's own contract test) reference the canonical path rather
@@ -289,15 +290,24 @@ const _: () = {
 /// "file not found" at render time.
 pub const PRELUDE_PATH: &str = "/themes/_prelude/lib.typ";
 
+/// Raw bytes of the shared native-theme prelude, baked into the binary
+/// at compile time (`include_bytes!` — no filesystem access at render
+/// time, CONSTITUTION §6.1).
+///
+/// Exported so [`crate::render::FerrocvWorld`] can inject the prelude
+/// into every World at [`PRELUDE_PATH`], making the native-theme
+/// contract universally importable (see that path's docs).
+pub const PRELUDE_BYTES: &[u8] = include_bytes!("../assets/themes/_prelude/lib.typ");
+
 /// `(virtual_path, bytes)` entry for the shared prelude.
 ///
-/// Identical in both native themes, so it is centralized here rather
-/// than repeated. `include_bytes!` bakes the source into the binary at
-/// compile time (no filesystem access at render time — §6.1).
-const PRELUDE_FILE: (&str, &[u8]) = (
-    PRELUDE_PATH,
-    include_bytes!("../assets/themes/_prelude/lib.typ"),
-);
+/// Still interned into each native theme's [`Theme::files`] for clarity
+/// (the theme's dependency on the prelude stays visible at its
+/// definition site); the World also injects the same bytes
+/// unconditionally, so the per-theme entry is now idempotent rather
+/// than load-bearing. Identical across native themes, so it is
+/// centralized here rather than repeated.
+const PRELUDE_FILE: (&str, &[u8]) = (PRELUDE_PATH, PRELUDE_BYTES);
 
 /// Virtual path of the `text-minimal` theme's entrypoint.
 ///
