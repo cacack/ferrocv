@@ -191,7 +191,8 @@ enum ThemesCommands {
     /// - 2: invalid name, target already exists, or IO error.
     New {
         /// Name of the theme to scaffold. Becomes the new directory's
-        /// name; letters, digits, `-`, and `_` only.
+        /// name; letters, digits, `-`, and `_` only, and must not start
+        /// with `-`.
         name: String,
         /// Parent directory to create `<name>/` inside. Defaults to the
         /// current directory. Created if missing, including any
@@ -584,13 +585,24 @@ then commit it next to the theme and diff against it in your tests.
 ";
 
 /// Validate a scaffold theme name: a bare directory component made of
-/// ASCII letters, digits, `-`, or `_`. Rejects empty, path separators,
-/// `.`/`..`, and anything else that could escape the target directory
-/// or produce a surprising path. Mirrors the "no separators, no `.typ`"
-/// constraint bundled theme names already satisfy.
+/// ASCII letters, digits, `-`, or `_`, not starting with `-`. Rejects
+/// empty, path separators, `.`/`..`, and anything else that could escape
+/// the target directory or produce a surprising path. Mirrors the "no
+/// separators, no `.typ`" constraint bundled theme names already satisfy.
+///
+/// The leading-`-` rejection matters because the emitted theme is meant
+/// to be passed straight back as `--theme <name>/resume.typ`; a name like
+/// `-x` would make that value start with `-`, which clap parses as a flag.
+/// (clap also blocks a bare `themes new -x` before this runs, but a user
+/// can still reach the validator via `themes new -- -x`.)
 fn validate_theme_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("theme name must not be empty".to_owned());
+    }
+    if name.starts_with('-') {
+        return Err(format!(
+            "invalid theme name `{name}`: must not start with `-`"
+        ));
     }
     if !name
         .chars()

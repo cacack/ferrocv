@@ -176,14 +176,15 @@ test stub. The emitted `resume.typ` `#import`s ferrocv's shared
 native-theme prelude and renders the major JSON Resume sections, so it
 renders straight away — point `render --theme` at the file:
 
-```
-$ ferrocv themes new mytheme
-$ ferrocv render resume.json --theme mytheme/resume.typ --output resume.pdf
+```sh
+ferrocv themes new mytheme
+ferrocv render resume.json --theme mytheme/resume.typ --output resume.pdf
 ```
 
 `<name>` must be a bare directory name (letters, digits, `-`, `_`; no
-path separators or `..`), and the command refuses to write into an
-existing target rather than clobber it. A fuller authoring walkthrough is
+leading `-`, no path separators or `..`), and the command refuses to
+write into an existing target rather than clobber it. A fuller authoring
+walkthrough is
 tracked separately; for now the generated file's comments and the bundled
 `classic` theme are the reference.
 

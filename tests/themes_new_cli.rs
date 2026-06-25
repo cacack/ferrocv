@@ -181,6 +181,31 @@ fn scaffold_rejects_name_with_path_separator() {
 }
 
 #[test]
+fn scaffold_rejects_leading_hyphen_name() {
+    // A name like `-x` would make the emitted `--theme -x/resume.typ`
+    // value start with `-` (which clap parses as a flag), so the
+    // validator rejects it. clap blocks a bare `themes new -x` itself,
+    // so reach the validator the only way a user can: through `--`.
+    let tmp = TempDir::new().expect("create temp dir");
+
+    ferrocv()
+        .arg("themes")
+        .arg("new")
+        .arg("--out")
+        .arg(tmp.path())
+        .arg("--")
+        .arg("-leading")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("must not start with"));
+
+    assert!(
+        !tmp.path().join("-leading").exists(),
+        "a rejected name must not create a directory"
+    );
+}
+
+#[test]
 fn scaffold_rejects_dotdot_name() {
     let tmp = TempDir::new().expect("create temp dir");
 
