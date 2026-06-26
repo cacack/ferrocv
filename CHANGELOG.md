@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.9.0](https://github.com/cacack/ferrocv/compare/v0.8.0...v0.9.0) (2026-06-26)
+
+
+### Features
+
+* **themes:** add PDF-first native theme `classic` ([e5a1858](https://github.com/cacack/ferrocv/commit/e5a1858f1e48b07552122db08283ae535ecd33a1))
+* **themes:** add themes new scaffold command ([c936925](https://github.com/cacack/ferrocv/commit/c936925fc12d2433d6f14fab289b2eab21a10c8c))
+* **themes:** default PDF rendering to the classic theme ([c6ad3c3](https://github.com/cacack/ferrocv/commit/c6ad3c39a6efd36fd0c0bf5d4c4540a14e5dd8d2))
+* **themes:** surface x- extension fields in the native theme prelude ([01a9cbd](https://github.com/cacack/ferrocv/commit/01a9cbdea0acedafe7f27c0affac7c61b96b5a88))
+
+
+### Bug Fixes
+
+* **themes:** reject leading-hyphen scaffold names; lint README example ([c28b518](https://github.com/cacack/ferrocv/commit/c28b5182b420d55499a38edb75ffef60f5ac6c1d))
+
 ## [0.8.0](https://github.com/cacack/ferrocv/compare/v0.7.0...v0.8.0) (2026-06-15)
 
 
