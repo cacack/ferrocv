@@ -1,8 +1,12 @@
-//! Golden-file tests for the `typst-jsonresume-cv` theme adapter.
+//! Golden-file tests for the PDF-target themes — the vendored adapters
+//! (`typst-jsonresume-cv`, `fantastic-cv`, `modern-cv`, `basic-resume`)
+//! and the native `classic` theme. The shared `run_golden` helper drives
+//! them all; text and HTML themes have their own harnesses in
+//! `render_text.rs` and `render_html.rs`.
 //!
 //! Enforces CONSTITUTION testing doctrine:
 //! - **§2** — every theme has a golden-file test. We compile the
-//!   adapter against a committed fixture, extract the rendered text
+//!   theme against a committed fixture, extract the rendered text
 //!   with `pdf-extract`, and compare against a committed reference.
 //!   PDF bytes are fragile across Typst patch versions; a normalized
 //!   text extraction is substantially more stable and still catches

@@ -183,10 +183,11 @@ ferrocv render resume.json --theme mytheme/resume.typ --output resume.pdf
 
 `<name>` must be a bare directory name (letters, digits, `-`, `_`; no
 leading `-`, no path separators or `..`), and the command refuses to
-write into an existing target rather than clobber it. A fuller authoring
-walkthrough is
-tracked separately; for now the generated file's comments and the bundled
-`classic` theme are the reference.
+write into an existing target rather than clobber it. For the full
+walkthrough — the `render(data) -> content` contract, the prelude API,
+and golden-test setup — see
+[`docs/native-themes.md`](docs/native-themes.md); the bundled `classic`
+theme is the worked example.
 
 `themes install` resolves transitive `@preview/...` dependencies
 recursively: installing one package also fetches every `@preview/...`

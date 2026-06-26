@@ -37,21 +37,18 @@ Pick **adapter** when:
 - The upstream's input shape is close enough to JSON Resume that the
   glue stays readable (a few hundred lines, not thousands).
 
-Pick **native theme** when:
-
-- You want a layout designed JSON-Resume-first, with no upstream
-  contract to honor.
-- The output target is something other than PDF (`text-minimal` exists
-  precisely because frame-extracted text needs a single-column,
-  bullet-free layout).
-- You want a long-lived theme that won't churn with upstream commits.
+Pick **native theme** when you want a layout designed JSON-Resume-first
+(no upstream contract to honor), a non-PDF target, or a long-lived theme
+that won't churn with upstream commits. [`native-themes.md`](native-themes.md)
+covers that path in full — it's the authoritative home for the native
+criteria, so they live there rather than being mirrored here.
 
 The two layers stay separable: adapter code does not leak into native
 themes, and native themes do not depend on adapter internals
 (CONSTITUTION §4). This guide covers adapters only; the full
-native-theme authoring guide (the prelude API, the scaffold command,
-golden-test setup) is tracked under issue #183. For now, the prelude
-source and the two themes that import it are the worked examples.
+native-theme authoring guide (the `render(data) -> content` contract,
+the prelude API, the `themes new` scaffold, golden-test setup) lives in
+[`native-themes.md`](native-themes.md).
 
 ## Two ways to use a Typst Universe template
 
