@@ -19,6 +19,8 @@ ignore = [
     # yaml-rust 0.4.5 unmaintained; transitive: typst → typst-library → two-face → syntect → yaml-rust.
     # Tracked in #154 — drop this entry once syntect migrates to yaml-rust2.
     { id = "RUSTSEC-2024-0320", reason = "transitive via typst → syntect; upstream syntect to migrate to yaml-rust2 (#154)" },
+    # ttf-parser 0.25.1 unmaintained; transitive: typst → fontdb/typst-library → ttf-parser.
+    { id = "RUSTSEC-2026-0192", reason = "transitive via typst → fontdb; upstream typst/fontdb to migrate" },
 ]
 
 [licenses]
