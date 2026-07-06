@@ -39,15 +39,24 @@
 // --- Layout helpers (theme-scoped; layout stays per-theme, §4) ------
 
 // A section: a spaced, letter-tracked bold heading with a full-width
-// rule beneath it, then the section body.
+// rule beneath it, then the section body. The leading space before the
+// heading sets the gap between sections.
 #let section(title, body) = {
-  v(7pt)
+  v(14pt)
   text(weight: "bold", size: 11pt, tracking: 0.4pt)[#upper(title)]
   v(1pt)
   line(length: 100%, stroke: 0.5pt)
   v(3pt)
   body
 }
+
+// Keep a single entry (its header and body) together: wrap it in a
+// non-breakable, full-width block so the title never strands at the
+// bottom of one page with its highlights pushed onto the next. The
+// explicit `width: 100%` is required — a default-width block shrinks to
+// fit its content, which would collapse the `1fr` dates-flush-right
+// grid in `entry_head`.
+#let entry_block(body) = block(breakable: false, width: 100%, body)
 
 // An entry header: title (bold) on the left, dates (italic) flush right
 // on the same row. Either side may be absent.
@@ -142,20 +151,22 @@
 #if work.len() > 0 {
   section("Experience", {
     for (i, entry) in work.enumerate() {
-      let name = nz(opt(entry, "name"))
-      let position = nz(opt(entry, "position"))
-      let title = if position != none and name != none {
-        position + ", " + name
-      } else if position != none {
-        position
-      } else { name }
-      entry_head(title, date_range(entry))
-      let wsum = nz(opt(entry, "summary"))
-      if wsum != none { text(size: 10pt)[#wsum]; linebreak() }
-      let highlights = items(entry, "highlights").filter(h => h != none and h != "")
-      if highlights.len() > 0 {
-        list(..highlights.map(h => [#h]))
-      }
+      entry_block({
+        let name = nz(opt(entry, "name"))
+        let position = nz(opt(entry, "position"))
+        let title = if position != none and name != none {
+          position + ", " + name
+        } else if position != none {
+          position
+        } else { name }
+        entry_head(title, date_range(entry))
+        let wsum = nz(opt(entry, "summary"))
+        if wsum != none { text(size: 10pt)[#wsum]; linebreak() }
+        let highlights = items(entry, "highlights").filter(h => h != none and h != "")
+        if highlights.len() > 0 {
+          list(..highlights.map(h => [#h]))
+        }
+      })
       if i < work.len() - 1 { v(4pt) }
     }
   })
@@ -166,15 +177,17 @@
 #if education.len() > 0 {
   section("Education", {
     for (i, entry) in education.enumerate() {
-      // Renders institution, study type/area, and dates. `score`,
-      // `courses`, and `url` are deliberately omitted to keep the entry
-      // compact; add them here if a fuller education block is wanted.
-      let institution = nz(opt(entry, "institution"))
-      entry_head(institution, date_range(entry))
-      let study_type = nz(opt(entry, "studyType"))
-      let area = nz(opt(entry, "area"))
-      let degree = join_present((study_type, area), ", ")
-      if degree != "" { text(size: 10pt)[#degree]; linebreak() }
+      entry_block({
+        // Renders institution, study type/area, and dates. `score`,
+        // `courses`, and `url` are deliberately omitted to keep the entry
+        // compact; add them here if a fuller education block is wanted.
+        let institution = nz(opt(entry, "institution"))
+        entry_head(institution, date_range(entry))
+        let study_type = nz(opt(entry, "studyType"))
+        let area = nz(opt(entry, "area"))
+        let degree = join_present((study_type, area), ", ")
+        if degree != "" { text(size: 10pt)[#degree]; linebreak() }
+      })
       if i < education.len() - 1 { v(4pt) }
     }
   })
@@ -185,16 +198,18 @@
 #if projects.len() > 0 {
   section("Projects", {
     for (i, entry) in projects.enumerate() {
-      let name = nz(opt(entry, "name"))
-      entry_head(name, date_range(entry))
-      let desc = nz(opt(entry, "description"))
-      if desc != none { text(size: 10pt)[#desc]; linebreak() }
-      let url = nz(opt(entry, "url"))
-      if url != none { text(size: 9pt, style: "italic")[#url]; linebreak() }
-      let highlights = items(entry, "highlights").filter(h => h != none and h != "")
-      if highlights.len() > 0 {
-        list(..highlights.map(h => [#h]))
-      }
+      entry_block({
+        let name = nz(opt(entry, "name"))
+        entry_head(name, date_range(entry))
+        let desc = nz(opt(entry, "description"))
+        if desc != none { text(size: 10pt)[#desc]; linebreak() }
+        let url = nz(opt(entry, "url"))
+        if url != none { text(size: 9pt, style: "italic")[#url]; linebreak() }
+        let highlights = items(entry, "highlights").filter(h => h != none and h != "")
+        if highlights.len() > 0 {
+          list(..highlights.map(h => [#h]))
+        }
+      })
       if i < projects.len() - 1 { v(4pt) }
     }
   })
@@ -231,20 +246,22 @@
 #if volunteer.len() > 0 {
   section("Volunteer", {
     for (i, entry) in volunteer.enumerate() {
-      let organization = nz(opt(entry, "organization"))
-      let position = nz(opt(entry, "position"))
-      let title = if position != none and organization != none {
-        position + ", " + organization
-      } else if position != none {
-        position
-      } else { organization }
-      entry_head(title, date_range(entry))
-      let vsum = nz(opt(entry, "summary"))
-      if vsum != none { text(size: 10pt)[#vsum]; linebreak() }
-      let highlights = items(entry, "highlights").filter(h => h != none and h != "")
-      if highlights.len() > 0 {
-        list(..highlights.map(h => [#h]))
-      }
+      entry_block({
+        let organization = nz(opt(entry, "organization"))
+        let position = nz(opt(entry, "position"))
+        let title = if position != none and organization != none {
+          position + ", " + organization
+        } else if position != none {
+          position
+        } else { organization }
+        entry_head(title, date_range(entry))
+        let vsum = nz(opt(entry, "summary"))
+        if vsum != none { text(size: 10pt)[#vsum]; linebreak() }
+        let highlights = items(entry, "highlights").filter(h => h != none and h != "")
+        if highlights.len() > 0 {
+          list(..highlights.map(h => [#h]))
+        }
+      })
       if i < volunteer.len() - 1 { v(4pt) }
     }
   })
@@ -255,13 +272,15 @@
 #if awards.len() > 0 {
   section("Awards", {
     for (i, entry) in awards.enumerate() {
-      let title = nz(opt(entry, "title"))
-      let date = nz(opt(entry, "date"))
-      entry_head(title, date)
-      let awarder = nz(opt(entry, "awarder"))
-      if awarder != none { text(size: 10pt)[#awarder]; linebreak() }
-      let asum = nz(opt(entry, "summary"))
-      if asum != none { text(size: 10pt)[#asum] }
+      entry_block({
+        let title = nz(opt(entry, "title"))
+        let date = nz(opt(entry, "date"))
+        entry_head(title, date)
+        let awarder = nz(opt(entry, "awarder"))
+        if awarder != none { text(size: 10pt)[#awarder]; linebreak() }
+        let asum = nz(opt(entry, "summary"))
+        if asum != none { text(size: 10pt)[#asum] }
+      })
       if i < awards.len() - 1 { v(4pt) }
     }
   })
@@ -272,13 +291,15 @@
 #if certificates.len() > 0 {
   section("Certificates", {
     for (i, entry) in certificates.enumerate() {
-      let name = nz(opt(entry, "name"))
-      let date = nz(opt(entry, "date"))
-      entry_head(name, date)
-      let issuer = nz(opt(entry, "issuer"))
-      if issuer != none { text(size: 10pt)[#issuer]; linebreak() }
-      let url = nz(opt(entry, "url"))
-      if url != none { text(size: 9pt, style: "italic")[#url]; linebreak() }
+      entry_block({
+        let name = nz(opt(entry, "name"))
+        let date = nz(opt(entry, "date"))
+        entry_head(name, date)
+        let issuer = nz(opt(entry, "issuer"))
+        if issuer != none { text(size: 10pt)[#issuer]; linebreak() }
+        let url = nz(opt(entry, "url"))
+        if url != none { text(size: 9pt, style: "italic")[#url]; linebreak() }
+      })
       if i < certificates.len() - 1 { v(4pt) }
     }
   })
@@ -289,15 +310,17 @@
 #if publications.len() > 0 {
   section("Publications", {
     for (i, entry) in publications.enumerate() {
-      let name = nz(opt(entry, "name"))
-      let release = nz(opt(entry, "releaseDate"))
-      entry_head(name, release)
-      let publisher = nz(opt(entry, "publisher"))
-      if publisher != none { text(size: 10pt)[#publisher]; linebreak() }
-      let psum = nz(opt(entry, "summary"))
-      if psum != none { text(size: 10pt)[#psum]; linebreak() }
-      let url = nz(opt(entry, "url"))
-      if url != none { text(size: 9pt, style: "italic")[#url]; linebreak() }
+      entry_block({
+        let name = nz(opt(entry, "name"))
+        let release = nz(opt(entry, "releaseDate"))
+        entry_head(name, release)
+        let publisher = nz(opt(entry, "publisher"))
+        if publisher != none { text(size: 10pt)[#publisher]; linebreak() }
+        let psum = nz(opt(entry, "summary"))
+        if psum != none { text(size: 10pt)[#psum]; linebreak() }
+        let url = nz(opt(entry, "url"))
+        if url != none { text(size: 9pt, style: "italic")[#url]; linebreak() }
+      })
       if i < publications.len() - 1 { v(4pt) }
     }
   })
@@ -349,10 +372,12 @@
 #if references.len() > 0 {
   section("References", {
     for (i, entry) in references.enumerate() {
-      let name = nz(opt(entry, "name"))
-      if name != none { text(weight: "bold")[#name]; linebreak() }
-      let reference = nz(opt(entry, "reference"))
-      if reference != none { text(size: 10pt, style: "italic")[#reference] }
+      entry_block({
+        let name = nz(opt(entry, "name"))
+        if name != none { text(weight: "bold")[#name]; linebreak() }
+        let reference = nz(opt(entry, "reference"))
+        if reference != none { text(size: 10pt, style: "italic")[#reference] }
+      })
       if i < references.len() - 1 { v(4pt) }
     }
   })

@@ -1,0 +1,18 @@
+# cargo-audit configuration. Auto-discovered by `cargo audit` from the
+# repo root, so `make audit` and CI (`cargo audit`) share this ignore
+# list — no duplicated --ignore flags across Makefile and ci.yml.
+#
+# cargo-audit fails only on `vulnerability`-class advisories; the
+# unmaintained/unsound advisories the deny.toml ignore list carries are
+# warnings here and need no entry. Keep this list a subset of
+# deny.toml's ignores, limited to the vulnerabilities we cannot fix from
+# this crate. Revisit on every typst version bump.
+[advisories]
+ignore = [
+    # quick-xml 0.38.4 DoS (quadratic attribute scan / unbounded ns alloc);
+    # transitive: typst → typst-library → hayagriva → citationberg → quick-xml.
+    # Only reachable via typst's bibliography path, not user input. Fixed in
+    # quick-xml >=0.41.0; blocked until the typst tree bumps.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]
