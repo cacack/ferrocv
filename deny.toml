@@ -21,6 +21,8 @@ ignore = [
     { id = "RUSTSEC-2024-0320", reason = "transitive via typst → syntect; upstream syntect to migrate to yaml-rust2 (#154)" },
     # ttf-parser 0.25.1 unmaintained; transitive: typst → fontdb/typst-library → ttf-parser.
     { id = "RUSTSEC-2026-0192", reason = "transitive via typst → fontdb; upstream typst/fontdb to migrate" },
+    # rustybuzz 0.20.1 unmaintained; transitive: typst → typst-layout/typst-pdf → (krilla) → rustybuzz.
+    { id = "RUSTSEC-2026-0206", reason = "transitive via typst → typst-layout/krilla; upstream to migrate" },
     # quick-xml 0.38.4 DoS (quadratic attribute scan / unbounded ns alloc); transitive:
     # typst → typst-library → hayagriva → citationberg → quick-xml. Only reachable via
     # typst's bibliography path, not user input. Fixed in quick-xml >=0.41.0; blocked
