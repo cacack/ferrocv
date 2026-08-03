@@ -5,9 +5,10 @@ on: pull_request_target
 # The logic lives in cacack/workflows so a fix lands once for every repo that
 # calls it, instead of being copy-pasted here and drifting.
 #
-# Pinned to the immutable v1.1.0 rather than the moving v1: the ecosystems
-# scope below is a deliberate policy choice, and an immutable pin means it
-# cannot change without a commit here. Bump it to adopt upstream fixes.
+# Pinned by commit SHA, like every other action here. A tag is mutable — even
+# v1.1.0, which is only immutable by convention — and the ecosystems scope
+# below is a deliberate policy choice that should not be able to change
+# without a commit in this repo. Dependabot bumps the SHA and this comment.
 #
 # `secrets: inherit` passes this repo's BOT_APP_ID / BOT_PRIVATE_KEY (the
 # ferrocv-steward App) through to the called workflow. That App token is what
@@ -21,7 +22,7 @@ permissions:
 
 jobs:
   automerge:
-    uses: cacack/workflows/.github/workflows/dependabot-automerge.yml@v1.1.0
+    uses: cacack/workflows/.github/workflows/dependabot-automerge.yml@fa3adb379cf9f4c8974491a220e3c19460eed8ba # v1.1.0
     with:
       ecosystems: github_actions
     secrets: inherit
