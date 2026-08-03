@@ -1,34 +1,27 @@
-name: dependabot-auto-merge
-
-# Enable GitHub's native auto-merge on Dependabot github-actions PRs so
-# routine action bumps land without manual review once CI is green.
-# Dependabot keeps its own branches rebased against main, so auto-merge
-# satisfies the "require branches up to date" protection rule on its own.
-# Scoped to the github-actions ecosystem only; cargo updates still merge
-# by hand.
+name: Dependabot Auto-Merge
 
 on: pull_request_target
 
-# pull_request_target runs in the base-repo context (with a writable
-# token) and never checks out the PR head, so the untrusted-code risk of
-# pull_request_target does not apply here.
+# The logic lives in cacack/workflows so a fix lands once for every repo that
+# calls it, instead of being copy-pasted here and drifting.
+#
+# Pinned to the immutable v1.1.0 rather than the moving v1: the ecosystems
+# scope below is a deliberate policy choice, and an immutable pin means it
+# cannot change without a commit here. Bump it to adopt upstream fixes.
+#
+# `secrets: inherit` passes this repo's BOT_APP_ID / BOT_PRIVATE_KEY (the
+# ferrocv-steward App) through to the called workflow. That App token is what
+# GITHUB_TOKEN could not be: it can hold the `workflow` permission GitHub
+# demands before enabling auto-merge on a PR touching .github/workflows/*, and
+# its push triggers CI on the resulting merge commit.
+#
+# Scoped to github_actions — cargo updates still merge by hand (see #230).
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
-  auto-merge:
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Fetch Dependabot metadata
-        id: meta
-        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Enable auto-merge for github-actions updates
-        if: steps.meta.outputs.package-ecosystem == 'github_actions'
-        run: gh pr merge --auto --merge "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  automerge:
+    uses: cacack/workflows/.github/workflows/dependabot-automerge.yml@v1.1.0
+    with:
+      ecosystems: github_actions
+    secrets: inherit
