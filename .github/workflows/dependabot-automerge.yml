@@ -1,0 +1,37 @@
+name: Dependabot Auto-Merge
+
+on: pull_request_target
+
+# The logic lives in cacack/workflows so a fix lands once for every repo that
+# calls it, instead of being copy-pasted here and drifting.
+#
+# Pinned by commit SHA, like every other action here. A tag is mutable — even
+# v2.0.0, which is only fixed by convention — and the ecosystems scope below is
+# a deliberate policy choice that should not be able to change without a commit
+# in this repo. Dependabot bumps the SHA and this comment.
+#
+# The two secrets are mapped by name rather than passed with `secrets:
+# inherit`, which would hand this workflow every secret the repo holds to
+# satisfy a contract that declares exactly two. They belong to the
+# ferrocv-steward App, whose token is what GITHUB_TOKEN could not be: it can
+# hold the `workflow` permission GitHub demands before enabling auto-merge on a
+# PR touching .github/workflows/*, and its push triggers CI on the resulting
+# merge commit.
+#
+# Scoped to github_actions — cargo updates still merge by hand (see #230).
+#
+# A called workflow's job cannot request more than the caller grants here, so
+# this must cover what that job declares — pull-requests included, or the run
+# fails at startup before any step executes.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  automerge:
+    uses: cacack/workflows/.github/workflows/dependabot-automerge.yml@42f4a8b03bbeb4cda758290b3c8cdbb88ed6d33e # v2.0.0
+    with:
+      ecosystems: github_actions
+    secrets:
+      BOT_APP_ID: ${{ secrets.BOT_APP_ID }}
+      BOT_PRIVATE_KEY: ${{ secrets.BOT_PRIVATE_KEY }}
