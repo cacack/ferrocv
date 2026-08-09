@@ -6,9 +6,9 @@ on: pull_request_target
 # calls it, instead of being copy-pasted here and drifting.
 #
 # Pinned by commit SHA, like every other action here. A tag is mutable — even
-# v1.1.0, which is only immutable by convention — and the ecosystems scope
-# below is a deliberate policy choice that should not be able to change
-# without a commit in this repo. Dependabot bumps the SHA and this comment.
+# v2.0.0, which is only fixed by convention — and the ecosystems scope below is
+# a deliberate policy choice that should not be able to change without a commit
+# in this repo. Dependabot bumps the SHA and this comment.
 #
 # `secrets: inherit` passes this repo's BOT_APP_ID / BOT_PRIVATE_KEY (the
 # ferrocv-steward App) through to the called workflow. That App token is what
@@ -17,12 +17,17 @@ on: pull_request_target
 # its push triggers CI on the resulting merge commit.
 #
 # Scoped to github_actions — cargo updates still merge by hand (see #230).
+#
+# A called workflow's job cannot request more than the caller grants here, so
+# this must cover what that job declares — pull-requests included, or the run
+# fails at startup before any step executes.
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   automerge:
-    uses: cacack/workflows/.github/workflows/dependabot-automerge.yml@fa3adb379cf9f4c8974491a220e3c19460eed8ba # v1.1.0
+    uses: cacack/workflows/.github/workflows/dependabot-automerge.yml@42f4a8b03bbeb4cda758290b3c8cdbb88ed6d33e # v2.0.0
     with:
       ecosystems: github_actions
     secrets: inherit
