@@ -42,7 +42,7 @@ jobs:
           toolchain: stable
           components: clippy
       - if: steps.detect.outputs.has_cargo == 'true'
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - if: steps.detect.outputs.has_cargo == 'true'
         run: cargo clippy --all-targets --all-features -- -D warnings
 
@@ -65,7 +65,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
       - if: steps.detect.outputs.has_cargo == 'true'
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - if: steps.detect.outputs.has_cargo == 'true'
         run: cargo test --all-features --workspace
 
@@ -101,7 +101,7 @@ jobs:
       - id: detect
         run: echo "has_lock=$([ -f Cargo.lock ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - if: steps.detect.outputs.has_lock == 'true'
-        uses: taiki-e/install-action@67729d5c413db75907f0ad1e39bb04b9c868ff60 # v2.85.7
+        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
         with:
           tool: cargo-audit
       - if: steps.detect.outputs.has_lock == 'true'
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: crate-ci/typos@bee27e3a4fd1ea2111cf90ab89cd076c870fce14 # v1.48.0
+      - uses: crate-ci/typos@8a48f81b6c64dcfea44b3633223084c4be58ac5f # v1.49.0
 
   verify-no-network-default:
     name: verify-no-network-default
@@ -126,7 +126,7 @@ jobs:
         with:
           toolchain: stable
       - if: steps.detect.outputs.has_cargo == 'true'
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - if: steps.detect.outputs.has_cargo == 'true'
         run: make verify-no-network-default
 
@@ -143,9 +143,9 @@ jobs:
           toolchain: stable
           components: llvm-tools-preview
       - if: steps.detect.outputs.has_cargo == 'true'
-        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - if: steps.detect.outputs.has_cargo == 'true'
-        uses: taiki-e/install-action@67729d5c413db75907f0ad1e39bb04b9c868ff60 # v2.85.7
+        uses: taiki-e/install-action@7f4eb899022d8fe70b20c4f3de697aa85c309026 # v2.85.11
         with:
           tool: cargo-llvm-cov
       # `make coverage` is the CI-parity entry point: it generates lcov.info
