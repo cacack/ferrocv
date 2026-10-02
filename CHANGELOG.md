@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.1](https://github.com/cacack/ferrocv/compare/v0.9.0...v0.9.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* **classic:** keep entries together across page breaks ([3bafebf](https://github.com/cacack/ferrocv/commit/3bafebfe5d3f7ed8815870f4084d277c3a818481))
+* **deps:** bump rustls to 0.23.45 for RUSTSEC-2026-0285 ([ca8f173](https://github.com/cacack/ferrocv/commit/ca8f173459ac69c944576e1a0f8f3a693a8f304e))
+* **deps:** clear RustSec advisories blocking CI ([043a974](https://github.com/cacack/ferrocv/commit/043a9743b8e4da8bddee7ae2c6e2035b6e60a75c))
+
 ## [0.9.0](https://github.com/cacack/ferrocv/compare/v0.8.0...v0.9.0) (2026-06-26)
 
 
