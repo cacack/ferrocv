@@ -12,9 +12,15 @@
 # with false positives like "ba"→"by" or "abd"→"and". Since we never
 # hand-edit the changelog, excluding it wholesale is simpler than
 # maintaining a per-SHA allow-list.
+#
+# docs/reviews/ holds generated panel-review artifacts: snapshots embed
+# commit SHAs and the reports quote misspelled CLI input on purpose
+# (e.g. `--audience securty`) to document behavior. Excluded for the
+# same reason as CHANGELOG.md.
 
 [files]
 extend-exclude = [
     "assets/themes/**",
     "CHANGELOG.md",
+    "docs/reviews/**",
 ]
