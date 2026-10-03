@@ -159,12 +159,21 @@ security bullets drop while "Grew the platform team…" stays.
 
 ## Mechanical filters
 
-Alongside the curated `--audience`, three theme-agnostic filters trim by
+Alongside the curated `--audience`, four theme-agnostic filters trim by
 rule rather than by tag. They compose with `--audience` (and each other):
 
 - **`--since <YYYY|YYYY-MM|YYYY-MM-DD>`** — drop `work` entries that ended
   before the cutoff; ongoing roles (no `endDate`) are always kept. On the
   example, `--since 2015` drops the Riverstone role (ended 2014).
+- **`--collapse-before <YYYY|YYYY-MM|YYYY-MM-DD>`** — keep `work` entries
+  that ended before the cutoff, but as one-liners: their `highlights` and
+  `summary` are omitted while name, position, and dates stay. This is the
+  "earlier experience" convention for long careers — shorter, yet the
+  history still reads complete. On the example, `--collapse-before 2016`
+  keeps Riverstone as a heading with dates and no bullets. Combine with
+  `--since` to drop the oldest roles and collapse the middle ones. Like
+  every filter, it only **omits** fields you wrote; it never rewrites or
+  summarizes them.
 - **`--max-bullets <N>`** — cap every `highlights` list at the first N
   bullets. It runs **after** `--audience`, so it caps the
   already-curated set.

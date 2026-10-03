@@ -94,6 +94,48 @@ fn tailor_since_drops_old_keeps_recent_and_ongoing() {
 }
 
 #[test]
+fn tailor_collapse_before_omits_old_bullets_but_keeps_the_role() {
+    // --collapse-before 2015 (#196): Old Corp (ended 2005) stays, with its
+    // name and dates but no highlights; Mid Corp (ended 2018) and the
+    // ongoing Current Corp keep their bullets.
+    let assert = ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--collapse-before")
+        .arg("2015")
+        .assert()
+        .success();
+    let doc: Value =
+        serde_json::from_slice(&assert.get_output().stdout).expect("stdout is valid JSON");
+    assert_eq!(
+        work_names(&doc),
+        vec!["Current Corp", "Mid Corp", "Old Corp"],
+        "collapse never drops a role"
+    );
+    let old = &doc["work"][2];
+    assert!(
+        old.get("highlights").is_none(),
+        "old role's bullets omitted"
+    );
+    assert_eq!(old["startDate"], "2003-06-01");
+    assert_eq!(old["endDate"], "2005-06-30");
+    assert_eq!(work_highlights(&doc, 1).len(), 3, "recent role untouched");
+}
+
+#[test]
+fn tailor_rejects_malformed_collapse_before() {
+    ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--collapse-before")
+        .arg("banana")
+        .assert()
+        .code(2)
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains("invalid 'collapse-before' value"));
+}
+
+#[test]
 fn tailor_max_bullets_caps_highlights() {
     // --max-bullets 2: every highlights array capped to its first 2
     // entries, by position.
