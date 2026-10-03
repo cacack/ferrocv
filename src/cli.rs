@@ -121,7 +121,8 @@ enum Commands {
     /// `--output <file>` for unattended or shared/recorded contexts.
     ///
     /// Supports the curated `--audience` filter and the mechanical
-    /// `--since` / `--max-bullets` / `--redact` filters.
+    /// `--since` / `--collapse-before` / `--max-bullets` / `--redact`
+    /// filters.
     ///
     /// Exit codes:
     /// - 0 — projected; derived document written to --output/stdout
@@ -282,6 +283,13 @@ struct ProjectionArgs {
     /// error.
     #[arg(long)]
     since: Option<String>,
+    /// Collapse `work` entries that ended before this ISO 8601 date to
+    /// one-liners: their `highlights` and `summary` are omitted, while
+    /// name, position, and dates are kept. Field omission only — nothing
+    /// is rewritten or summarized. Composes with `--since` (drop the
+    /// oldest, collapse the middle). A malformed value is a usage error.
+    #[arg(long, value_name = "DATE")]
+    collapse_before: Option<String>,
     /// Cap each entry's `highlights` list at N bullets, keeping the
     /// first N by position. `0` removes all highlights.
     #[arg(long, value_name = "N")]
@@ -298,6 +306,7 @@ impl ProjectionArgs {
         ProjectionSpec {
             audience: self.audience.clone(),
             since: self.since.clone(),
+            collapse_before: self.collapse_before.clone(),
             max_bullets: self.max_bullets,
             redact: self.redact.map(|r| match r {
                 RedactArg::Pii => RedactSet::Pii,
@@ -315,7 +324,9 @@ impl ProjectionArgs {
 /// way a structurally-invalid master already does.
 fn projection_exit_code(err: &ProjectionError) -> u8 {
     match err {
-        ProjectionError::InvalidSince(_) | ProjectionError::UnknownAudience { .. } => 2,
+        ProjectionError::InvalidSince(_)
+        | ProjectionError::InvalidCollapseBefore(_)
+        | ProjectionError::UnknownAudience { .. } => 2,
         ProjectionError::HighlightsTagMismatch { .. } => 1,
     }
 }

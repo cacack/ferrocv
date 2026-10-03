@@ -17,14 +17,18 @@
 //!   are stripped from the derived document.
 //! - [`ProjectionSpec::since`] — drop `work` entries that ended before a
 //!   cutoff date; ongoing entries (no `endDate`) are always kept.
+//! - [`ProjectionSpec::collapse_before`] — keep `work` entries that ended
+//!   before a cutoff date, but omit their `highlights` and `summary`.
 //! - [`ProjectionSpec::max_bullets`] — cap every `highlights` array at
 //!   the first N entries by position.
 //! - [`ProjectionSpec::redact`] — remove named PII fields from `basics`.
 //!
 //! Selection lives here in Rust, never in themes (§4/§5): a theme only
-//! ever sees the already-narrowed document. The mechanical filters
-//! (`since`/`max_bullets`/`redact`) do **not** touch `x-ferrocv`; only
-//! curated `audience` selection consumes and strips it.
+//! ever sees the already-narrowed document. The mechanical filters do
+//! **not** consume audience tags; only curated `audience` selection
+//! consumes and strips `x-ferrocv`. The one exception is narrow:
+//! `collapse_before` drops `x-ferrocv.highlights` from entries it
+//! collapses, because it removes the `highlights` array those tags index.
 //!
 //! Both CLI surfaces — the standalone `tailor` subcommand and the
 //! `render` projection flags (ADR 0005) — call [`project`], so the two
@@ -78,6 +82,13 @@ pub struct ProjectionSpec {
     /// of `"2015"` survives `--since 2015-06`). Ongoing entries (no
     /// `endDate`) are always kept.
     pub since: Option<String>,
+    /// Collapse `work` entries that ended before this ISO 8601 date to
+    /// one-liners (#196): omit their `highlights` and `summary` (and the
+    /// index-parallel `x-ferrocv.highlights`), keeping every other field.
+    /// Uses the same granularity-aware comparison as `since`; ongoing
+    /// entries are never collapsed. Field omission only — CONSTITUTION §7:
+    /// projection never generates, summarizes, or rewrites text.
+    pub collapse_before: Option<String>,
     /// Cap every `highlights` array at this many entries (first N by
     /// position). `0` empties them.
     pub max_bullets: Option<usize>,
@@ -101,7 +112,8 @@ impl ProjectionSpec {
     /// document.
     ///
     /// This covers only errors detectable from the flags alone — currently
-    /// just that `since` (if set) is a usable ISO 8601 date. Callers should
+    /// that `since` and `collapse_before` (if set) are usable ISO 8601
+    /// dates. Callers should
     /// run it *before* reading or validating the input document, so a
     /// malformed flag value surfaces as a usage error rather than being
     /// masked by an unrelated schema failure in the document. [`project`]
@@ -118,6 +130,11 @@ impl ProjectionSpec {
         {
             return Err(ProjectionError::InvalidSince(since.clone()));
         }
+        if let Some(cutoff) = &self.collapse_before
+            && !is_iso_date(cutoff)
+        {
+            return Err(ProjectionError::InvalidCollapseBefore(cutoff.clone()));
+        }
         Ok(())
     }
 }
@@ -125,7 +142,8 @@ impl ProjectionSpec {
 /// An error from [`project`].
 ///
 /// Two failure classes, and the CLI maps them to *different* exit codes:
-/// [`InvalidSince`](ProjectionError::InvalidSince) and
+/// [`InvalidSince`](ProjectionError::InvalidSince),
+/// [`InvalidCollapseBefore`](ProjectionError::InvalidCollapseBefore), and
 /// [`UnknownAudience`](ProjectionError::UnknownAudience) are bad flag
 /// values (usage errors), while
 /// [`HighlightsTagMismatch`](ProjectionError::HighlightsTagMismatch) is a
@@ -140,6 +158,8 @@ impl ProjectionSpec {
 pub enum ProjectionError {
     /// The `--since` value is not a recognizable ISO 8601 date.
     InvalidSince(String),
+    /// The `--collapse-before` value is not a recognizable ISO 8601 date.
+    InvalidCollapseBefore(String),
     /// An entry's `x-ferrocv.highlights` tag array is not aligned with
     /// its `highlights` array — different lengths. ADR 0004 makes this a
     /// hard error rather than a silent pad/truncate, because a positional
@@ -180,6 +200,11 @@ impl fmt::Display for ProjectionError {
                 f,
                 "invalid 'since' value {value:?}: expected an ISO 8601 date \
                  (YYYY, YYYY-MM, or YYYY-MM-DD)"
+            ),
+            ProjectionError::InvalidCollapseBefore(value) => write!(
+                f,
+                "invalid 'collapse-before' value {value:?}: expected an ISO 8601 \
+                 date (YYYY, YYYY-MM, or YYYY-MM-DD)"
             ),
             ProjectionError::HighlightsTagMismatch {
                 section,
@@ -227,14 +252,17 @@ impl std::error::Error for ProjectionError {}
 ///
 /// `doc` is never mutated. The returned [`Value`] is a fresh document
 /// with the filters applied in a fixed order — `audience`, then `since`,
-/// then `max_bullets`, then `redact` — so composition is deterministic.
+/// then `collapse_before`, then `max_bullets`, then `redact` — so
+/// composition is deterministic.
 ///
 /// Curated `audience` selection runs **first** so that it precedes the
 /// positional `max_bullets` cap ("keep what's relevant, *then* cap"), and
 /// so the index-parallel `x-ferrocv.highlights` tags are consumed against
 /// the entry's full, un-truncated `highlights` array.
 ///
-/// Returns [`ProjectionError::InvalidSince`] if `spec.since` is malformed,
+/// Returns [`ProjectionError::InvalidSince`] or
+/// [`ProjectionError::InvalidCollapseBefore`] if a date flag is malformed,
+/// [`ProjectionError::UnknownAudience`] if no tag uses `spec.audience`,
 /// or [`ProjectionError::HighlightsTagMismatch`] if an entry's audience
 /// highlight-tags are not aligned with its highlights.
 pub fn project(doc: &Value, spec: &ProjectionSpec) -> Result<Value, ProjectionError> {
@@ -251,6 +279,9 @@ pub fn project(doc: &Value, spec: &ProjectionSpec) -> Result<Value, ProjectionEr
     }
     if let Some(since) = &spec.since {
         apply_since(&mut out, since);
+    }
+    if let Some(cutoff) = &spec.collapse_before {
+        apply_collapse_before(&mut out, cutoff);
     }
     if let Some(n) = spec.max_bullets {
         apply_max_bullets(&mut out, n);
@@ -459,6 +490,42 @@ fn apply_since(out: &mut Value, since: &str) {
             // No (or non-string) endDate ⇒ ongoing ⇒ keep.
             None => true,
         });
+    }
+}
+
+/// Collapse `work` entries that ended before `cutoff` to one-liners
+/// (#196): omit `highlights` and `summary`, and drop the now-orphaned
+/// index-parallel `x-ferrocv.highlights` (removing `x-ferrocv` entirely if
+/// that empties it). Every other field — name, position, dates, location,
+/// url — is kept verbatim. Field omission only (CONSTITUTION §7).
+///
+/// "Ended before" uses the same granularity-aware rule as `--since`
+/// ([`kept_by_since`]): an entry collapses exactly when `--since` with the
+/// same date would drop it. No (or non-string) `endDate` ⇒ ongoing ⇒ kept
+/// whole.
+fn apply_collapse_before(out: &mut Value, cutoff: &str) {
+    let Some(work) = out.get_mut("work").and_then(Value::as_array_mut) else {
+        return;
+    };
+    for entry in work {
+        let ended_before = entry
+            .get("endDate")
+            .and_then(Value::as_str)
+            .is_some_and(|end| !kept_by_since(end, cutoff));
+        if !ended_before {
+            continue;
+        }
+        let Some(obj) = entry.as_object_mut() else {
+            continue;
+        };
+        obj.remove("highlights");
+        obj.remove("summary");
+        if let Some(Value::Object(ext)) = obj.get_mut("x-ferrocv") {
+            ext.remove("highlights");
+            if ext.is_empty() {
+                obj.remove("x-ferrocv");
+            }
+        }
     }
 }
 
@@ -692,6 +759,7 @@ mod tests {
         let spec = ProjectionSpec {
             audience: Some("security".into()),
             since: Some("2015".into()),
+            collapse_before: Some("2018".into()),
             max_bullets: Some(1),
             redact: Some(RedactSet::Pii),
         };
@@ -1071,6 +1139,131 @@ mod tests {
         assert_eq!(
             project(&master(), &spec),
             Err(ProjectionError::InvalidSince("banana".into()))
+        );
+    }
+
+    /// A master for `collapse_before`: an ongoing role, a recent ended
+    /// role, and an old role carrying a summary, highlights, and both
+    /// granularities of `x-ferrocv` tags.
+    fn collapse_master() -> Value {
+        json!({
+            "work": [
+                { "name": "Now Corp", "startDate": "2020-01", "highlights": ["now"] },
+                {
+                    "name": "Recent Corp",
+                    "endDate": "2019-12",
+                    "summary": "recent summary",
+                    "highlights": ["r1", "r2", "r3"]
+                },
+                {
+                    "name": "Old Corp",
+                    "position": "Engineer",
+                    "startDate": "2008-01",
+                    "endDate": "2015-06-12",
+                    "location": "Columbus",
+                    "summary": "old summary",
+                    "highlights": ["o1", "o2"],
+                    "x-ferrocv": {
+                        "audience": ["security", "leadership"],
+                        "highlights": [["security"], ["leadership"]]
+                    }
+                }
+            ]
+        })
+    }
+
+    fn collapse(cutoff: &str) -> ProjectionSpec {
+        ProjectionSpec {
+            collapse_before: Some(cutoff.into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn collapse_before_omits_bullets_and_summary_of_old_entries_only() {
+        let out = project(&collapse_master(), &collapse("2015-07")).unwrap();
+        let work = out["work"].as_array().unwrap();
+        assert_eq!(
+            work_names(&out),
+            vec!["Now Corp", "Recent Corp", "Old Corp"]
+        );
+        assert_eq!(highlights(&work[0]), vec!["now"], "ongoing untouched");
+        assert_eq!(work[1]["summary"], "recent summary", "recent untouched");
+        assert_eq!(highlights(&work[1]), vec!["r1", "r2", "r3"]);
+        // Field omission only (§7): heading, dates, and location survive
+        // verbatim; nothing is generated in place of what was removed.
+        let old = &work[2];
+        assert!(old.get("highlights").is_none());
+        assert!(old.get("summary").is_none());
+        assert_eq!(old["position"], "Engineer");
+        assert_eq!(old["startDate"], "2008-01");
+        assert_eq!(old["endDate"], "2015-06-12");
+        assert_eq!(old["location"], "Columbus");
+    }
+
+    #[test]
+    fn collapse_before_clears_orphaned_highlight_tags_but_keeps_audience() {
+        let out = project(&collapse_master(), &collapse("2015-07")).unwrap();
+        let old = &out["work"][2];
+        assert!(old.pointer("/x-ferrocv/highlights").is_none());
+        assert_eq!(
+            old.pointer("/x-ferrocv/audience"),
+            Some(&json!(["security", "leadership"]))
+        );
+        // With only highlight tags present, x-ferrocv is removed entirely.
+        let doc = json!({ "work": [{
+            "name": "Old", "endDate": "2001", "highlights": ["a"],
+            "x-ferrocv": { "highlights": [["security"]] }
+        }] });
+        let out = project(&doc, &collapse("2015")).unwrap();
+        assert!(out["work"][0].get("x-ferrocv").is_none());
+    }
+
+    #[test]
+    fn collapse_before_is_granularity_aware_like_since() {
+        // endDate 2015-06-12 is definitely before 2015-07 ⇒ collapsed, but
+        // not definitely before 2015-06 (it falls inside it) ⇒ kept whole.
+        let kept = project(&collapse_master(), &collapse("2015-06")).unwrap();
+        assert_eq!(highlights(&kept["work"][2]), vec!["o1", "o2"]);
+        let collapsed = project(&collapse_master(), &collapse("2015-07")).unwrap();
+        assert!(collapsed["work"][2].get("highlights").is_none());
+    }
+
+    #[test]
+    fn collapse_before_composes_with_audience_since_and_max_bullets() {
+        // audience runs first: the old entry's leadership bullet is
+        // filtered, then the entry collapses anyway. since drops nothing
+        // here; max_bullets caps only what collapse left.
+        let spec = ProjectionSpec {
+            audience: Some("security".into()),
+            since: Some("2000".into()),
+            collapse_before: Some("2015-07".into()),
+            max_bullets: Some(1),
+            ..Default::default()
+        };
+        let out = project(&collapse_master(), &spec).unwrap();
+        let work = out["work"].as_array().unwrap();
+        assert_eq!(highlights(&work[1]), vec!["r1"], "recent capped");
+        assert!(work[2].get("highlights").is_none(), "old collapsed");
+        assert!(work[2].get("x-ferrocv").is_none(), "audience stripped tags");
+
+        // since drops the oldest; collapse_before shortens the middle.
+        let spec = ProjectionSpec {
+            since: Some("2015-07".into()),
+            collapse_before: Some("2020".into()),
+            ..Default::default()
+        };
+        let out = project(&collapse_master(), &spec).unwrap();
+        assert_eq!(work_names(&out), vec!["Now Corp", "Recent Corp"]);
+        assert!(out["work"][1].get("highlights").is_none());
+        assert_eq!(highlights(&out["work"][0]), vec!["now"]);
+    }
+
+    #[test]
+    fn invalid_collapse_before_is_rejected() {
+        assert_eq!(
+            project(&master(), &collapse("banana")),
+            Err(ProjectionError::InvalidCollapseBefore("banana".into()))
         );
     }
 

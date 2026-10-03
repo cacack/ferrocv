@@ -48,6 +48,12 @@ fn spec(
     s
 }
 
+/// Add a `collapse_before` cutoff to a spec built by [`spec`].
+fn collapse_before(mut s: ProjectionSpec, cutoff: &str) -> ProjectionSpec {
+    s.collapse_before = Some(cutoff.to_owned());
+    s
+}
+
 /// Recursively check whether any object in `value` carries an `x-ferrocv`
 /// key. Walks the parsed tree rather than substring-matching raw bytes, so
 /// a field *value* containing the text can't false-pass and a nested key
@@ -95,8 +101,16 @@ fn every_filter_and_combination_revalidates() {
         ("max_bullets=2", spec(None, None, Some(2), false)),
         ("redact=pii", spec(None, None, None, true)),
         (
+            "collapse_before=2015",
+            collapse_before(spec(None, None, None, false), "2015"),
+        ),
+        (
             "all-filters-combined",
             spec(Some("security"), Some("2015"), Some(2), true),
+        ),
+        (
+            "all-filters-with-collapse",
+            collapse_before(spec(Some("security"), Some("2004"), Some(2), true), "2019"),
         ),
     ];
 

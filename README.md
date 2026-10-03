@@ -149,6 +149,10 @@ The **mechanical** filters (theme-agnostic):
 
 - `--since <YYYY|YYYY-MM|YYYY-MM-DD>` — drop `work` entries that ended
   before the cutoff. Ongoing roles (no `endDate`) are always kept.
+- `--collapse-before <YYYY|YYYY-MM|YYYY-MM-DD>` — keep `work` entries
+  that ended before the cutoff as one-liners: `highlights` and `summary`
+  are omitted, name/position/dates kept. Field omission only — nothing
+  is rewritten.
 - `--max-bullets <N>` — cap every `highlights` list at the first N
   bullets. Runs *after* `--audience`, so it caps the already-curated
   set.

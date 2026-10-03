@@ -963,6 +963,33 @@ fn render_with_since_flag_succeeds() {
 }
 
 #[test]
+fn render_with_collapse_before_shows_role_without_its_bullets() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("master_projection"))
+        .arg("--collapse-before")
+        .arg("2015")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success();
+    let text = std::fs::read_to_string(&out).expect("read output");
+    assert!(text.contains("Old Corp"), "collapsed role still rendered");
+    assert!(
+        !text.contains("Wrote the original parser"),
+        "collapsed role's bullets must not render"
+    );
+    assert!(
+        text.contains("Shipped the billing service"),
+        "recent role keeps its bullets"
+    );
+}
+
+#[test]
 fn render_with_max_bullets_and_redact_succeeds() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = tmp.path().join("out.txt");
