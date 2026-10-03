@@ -128,7 +128,8 @@ enum Commands {
     /// - 1 — master parsed but failed schema validation, or an
     ///   `x-ferrocv.highlights` tag array is misaligned with its
     ///   `highlights`
-    /// - 2 — usage error (bad flag value), IO error, or parse error
+    /// - 2 — usage error (bad flag value, including an `--audience`
+    ///   that no tag in the master uses), IO error, or parse error
     Tailor {
         /// Path to the master JSON Resume. Reads stdin if omitted.
         path: Option<PathBuf>,
@@ -271,7 +272,8 @@ struct ProjectionArgs {
     /// Keep only content tagged for this audience under `x-ferrocv`
     /// (curated selection). Untagged content is kept for every audience;
     /// tagged content is kept only for the audiences it lists. Takes
-    /// exactly one value.
+    /// exactly one value. A name that no `x-ferrocv` tag in the document
+    /// uses is a usage error that lists the known audiences.
     #[arg(long, value_name = "NAME")]
     audience: Option<String>,
     /// Drop `work` entries that ended before this ISO 8601 date
@@ -313,7 +315,7 @@ impl ProjectionArgs {
 /// way a structurally-invalid master already does.
 fn projection_exit_code(err: &ProjectionError) -> u8 {
     match err {
-        ProjectionError::InvalidSince(_) => 2,
+        ProjectionError::InvalidSince(_) | ProjectionError::UnknownAudience { .. } => 2,
         ProjectionError::HighlightsTagMismatch { .. } => 1,
     }
 }

@@ -24,3 +24,8 @@ extend-exclude = [
     "CHANGELOG.md",
     "docs/reviews/**",
 ]
+
+# `securty` is a deliberate misspelling used in tests and docs/tailoring.md
+# to exercise the unknown-`--audience` error (#246).
+[default.extend-words]
+securty = "securty"

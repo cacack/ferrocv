@@ -197,11 +197,18 @@ anywhere.)
   strings — and nothing can detect that. After you reshuffle an entry's
   highlights, re-check its `x-ferrocv.highlights` lines up.
 
-- **Typos in the namespace fail silently.** Unknown `x-` fields are ignored
-  by design, so `x-ferovcv` (or `highlght`) drops the whole spec with no
-  error — and because untagged content is universal, the resulting cut
-  looks plausible but is actually un-tailored. Double-check the spelling is
-  exactly `x-ferrocv` with `audience` / `highlights`.
+- **An `--audience` no tag uses is an error.** If the name you pass appears
+  in no `x-ferrocv` tag anywhere in the master — usually a typo like
+  `--audience securty` — ferrocv exits 2, writes nothing, and lists the
+  audiences the master does tag. Without this, untagged content being
+  universal would make the cut look plausible but be un-tailored.
+
+- **Typos in the namespace can still fail silently.** Unknown `x-` fields
+  are ignored by design, so `x-ferovcv` (or `highlght`) drops that spec with
+  no error. If *every* tag is misspelled, the check above catches it (the
+  master has no audience tags); if only some are, those entries quietly
+  become universal. Double-check the spelling is exactly `x-ferrocv` with
+  `audience` / `highlights`.
 
 - **`tailor` with no `-o` prints full PII to stdout.** The derived document
   includes everything `--redact` didn't remove. That's fine interactively,

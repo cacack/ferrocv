@@ -79,8 +79,8 @@ fn every_filter_and_combination_revalidates() {
 
     // The full matrix: each filter alone, plus the all-filters cut. The
     // `master_projection` fixture tags content for `security` and
-    // `leadership`; `archaeology` is an audience nothing is tagged for
-    // (exercises the "only universal entries survive" path).
+    // `leadership`. (An audience nothing is tagged for is now an error;
+    // see `audience_no_tag_uses_is_an_error_not_an_untailored_cut`.)
     let cases: &[(&str, ProjectionSpec)] = &[
         (
             "audience=security",
@@ -89,10 +89,6 @@ fn every_filter_and_combination_revalidates() {
         (
             "audience=leadership",
             spec(Some("leadership"), None, None, false),
-        ),
-        (
-            "audience=archaeology (untagged)",
-            spec(Some("archaeology"), None, None, false),
         ),
         ("since=2015", spec(None, Some("2015"), None, false)),
         ("max_bullets=0", spec(None, None, Some(0), false)),
@@ -120,7 +116,7 @@ fn audience_derived_document_is_clean_and_revalidates() {
     // (the tags were consumed and stripped) *and* re-validates.
     let master = fixture("master_projection");
 
-    for audience in ["security", "leadership", "archaeology"] {
+    for audience in ["security", "leadership"] {
         let derived = project(&master, &spec(Some(audience), None, None, false))
             .unwrap_or_else(|e| panic!("[{audience}] project failed: {e}"));
         assert!(
@@ -143,6 +139,19 @@ fn malformed_since_is_a_spec_error_with_no_document() {
     assert!(
         matches!(result, Err(ProjectionError::InvalidSince(ref v)) if v == "banana"),
         "expected InvalidSince(\"banana\"), got {result:?}"
+    );
+}
+
+#[test]
+fn audience_no_tag_uses_is_an_error_not_an_untailored_cut() {
+    // #246: an audience nothing is tagged for used to yield a plausible,
+    // un-tailored (universal-only) cut. It is now rejected outright.
+    let master = fixture("master_projection");
+    let err = project(&master, &spec(Some("archaeology"), None, None, false))
+        .expect_err("unknown audience must be rejected");
+    assert!(
+        matches!(err, ProjectionError::UnknownAudience { ref audience, .. } if audience == "archaeology"),
+        "expected UnknownAudience, got {err:?}"
     );
 }
 
