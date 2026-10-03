@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/cacack/ferrocv/compare/v0.9.1...v0.10.0) (2026-10-03)
+
+
+### Features
+
+* **projection:** add --collapse-before to collapse old roles to one-liners ([4ca7e08](https://github.com/cacack/ferrocv/commit/4ca7e08063f72b24827d277676ca6cc535f257c5)), closes [#196](https://github.com/cacack/ferrocv/issues/196)
+
+
+### Bug Fixes
+
+* **projection:** reject an --audience that no tag in the master uses ([a11d644](https://github.com/cacack/ferrocv/commit/a11d6442fd3cf1da3911855b58bf42f519da4ae6)), closes [#246](https://github.com/cacack/ferrocv/issues/246)
+
 ## [0.9.1](https://github.com/cacack/ferrocv/compare/v0.9.0...v0.9.1) (2026-10-02)
 
 
