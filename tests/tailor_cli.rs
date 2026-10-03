@@ -389,6 +389,27 @@ fn tailor_audience_selects_tagged_content() {
 }
 
 #[test]
+fn tailor_unknown_audience_is_usage_error_listing_known_audiences() {
+    // #246: an --audience no tag uses (here a typo) would otherwise exit 0
+    // with a plausible but un-tailored cut. It is a usage error instead:
+    // exit 2, nothing on stdout, and stderr names the known audiences.
+    ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--audience")
+        .arg("securty")
+        .assert()
+        .code(2)
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains(
+            "\"securty\" matches no x-ferrocv tags",
+        ))
+        .stderr(predicate::str::contains(
+            "known audiences: \"leadership\", \"security\"",
+        ));
+}
+
+#[test]
 fn tailor_audience_strips_x_ferrocv_from_derived_document() {
     // Curated selection consumes the tags; the derived document must
     // carry no x-ferrocv anywhere (ADR 0004 — tidiness + not leaking the

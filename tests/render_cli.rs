@@ -1048,6 +1048,26 @@ fn render_with_audience_flag_selects_tagged_content() {
 }
 
 #[test]
+fn render_unknown_audience_is_usage_error_with_no_output() {
+    // #246: same guard as `tailor` — render shares `project()` (ADR 0005).
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("master_projection"))
+        .arg("--audience")
+        .arg("securty")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("known audiences"));
+    assert!(!out.exists(), "no output file on an unknown audience");
+}
+
+#[test]
 fn render_audience_equivalent_to_tailor_then_render() {
     // ADR 0005: `render --audience X` is equivalent to `tailor --audience
     // X | render`. The equivalence lives on the derived JSON; we assert it

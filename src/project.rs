@@ -30,6 +30,7 @@
 //! `render` projection flags (ADR 0005) — call [`project`], so the two
 //! are equivalent by construction.
 
+use std::collections::BTreeSet;
 use std::fmt;
 
 use serde_json::Value;
@@ -124,8 +125,9 @@ impl ProjectionSpec {
 /// An error from [`project`].
 ///
 /// Two failure classes, and the CLI maps them to *different* exit codes:
-/// [`InvalidSince`](ProjectionError::InvalidSince) is a malformed flag
-/// value (a usage error), while
+/// [`InvalidSince`](ProjectionError::InvalidSince) and
+/// [`UnknownAudience`](ProjectionError::UnknownAudience) are bad flag
+/// values (usage errors), while
 /// [`HighlightsTagMismatch`](ProjectionError::HighlightsTagMismatch) is a
 /// defect in the master document (treated like a schema failure).
 ///
@@ -158,6 +160,17 @@ pub enum ProjectionError {
         /// Length of the misaligned `x-ferrocv.highlights` array.
         tags_len: usize,
     },
+    /// The requested audience appears in no `x-ferrocv` tag anywhere in
+    /// the document (#246). Under include-by-default that would silently
+    /// yield a plausible but un-tailored cut — almost always a typo in the
+    /// flag or the tags — so it is rejected instead.
+    UnknownAudience {
+        /// The `--audience` value as given.
+        audience: String,
+        /// Every audience name the document does tag, sorted and
+        /// deduplicated; empty when the document carries no audience tags.
+        known: Vec<String>,
+    },
 }
 
 impl fmt::Display for ProjectionError {
@@ -189,6 +202,20 @@ impl fmt::Display for ProjectionError {
                      tag(s) but the entry has {highlights_len} highlight(s); they \
                      must be the same length"
                 )
+            }
+            // Debug-quoted for the same stderr-injection reason as above:
+            // both the flag value and the tag names are user-supplied.
+            ProjectionError::UnknownAudience { audience, known } => {
+                write!(
+                    f,
+                    "audience {audience:?} matches no x-ferrocv tags in the document; "
+                )?;
+                if known.is_empty() {
+                    write!(f, "the document has no x-ferrocv audience tags")
+                } else {
+                    let names: Vec<String> = known.iter().map(|k| format!("{k:?}")).collect();
+                    write!(f, "known audiences: {}", names.join(", "))
+                }
             }
         }
     }
@@ -252,9 +279,19 @@ pub fn project(doc: &Value, spec: &ProjectionSpec) -> Result<Value, ProjectionEr
 /// `--redact`'s job, not audience selection — ADR 0004); only its
 /// `x-ferrocv` control metadata, if any, is stripped.
 ///
-/// Returns [`ProjectionError::HighlightsTagMismatch`] if an entry's
+/// Returns [`ProjectionError::UnknownAudience`] if `audience` appears in
+/// no tag anywhere in the document (#246), or
+/// [`ProjectionError::HighlightsTagMismatch`] if an entry's
 /// `x-ferrocv.highlights` length differs from its `highlights` length.
 fn apply_audience(out: &mut Value, audience: &str) -> Result<(), ProjectionError> {
+    let known = collect_audiences(out);
+    if !known.contains(audience) {
+        return Err(ProjectionError::UnknownAudience {
+            audience: audience.to_owned(),
+            known: known.into_iter().collect(),
+        });
+    }
+
     let Some(root) = out.as_object_mut() else {
         return Ok(());
     };
@@ -289,6 +326,34 @@ fn apply_audience(out: &mut Value, audience: &str) -> Result<(), ProjectionError
     }
 
     Ok(())
+}
+
+/// Every audience name tagged anywhere in `doc`: entry-level
+/// `x-ferrocv.audience` lists and highlight-level `x-ferrocv.highlights`
+/// slots across all top-level array sections. Non-string tags are ignored,
+/// matching how the filters treat them.
+fn collect_audiences(doc: &Value) -> BTreeSet<String> {
+    let mut known = BTreeSet::new();
+    let mut add = |tags: &Value| {
+        if let Value::Array(tags) = tags {
+            known.extend(tags.iter().filter_map(Value::as_str).map(str::to_owned));
+        }
+    };
+    let entries = doc
+        .as_object()
+        .into_iter()
+        .flat_map(|root| root.values())
+        .filter_map(Value::as_array)
+        .flatten();
+    for entry in entries {
+        if let Some(tags) = entry.pointer("/x-ferrocv/audience") {
+            add(tags);
+        }
+        if let Some(Value::Array(slots)) = entry.pointer("/x-ferrocv/highlights") {
+            slots.iter().for_each(&mut add);
+        }
+    }
+    known
 }
 
 /// Whether an array element is kept for `audience` based on its own
@@ -752,14 +817,59 @@ mod tests {
 
     #[test]
     fn audience_keeps_untagged_entries_as_universal() {
-        // Untagged Corp has no x-ferrocv at all ⇒ universal ⇒ kept for
-        // every audience, including one nothing is tagged for.
+        // Untagged Corp has no x-ferrocv at all ⇒ universal ⇒ kept even
+        // for an audience that only tags highlights (no entry lists it).
+        let mut master = audience_master();
+        master["work"][0]["x-ferrocv"]["highlights"][2] = json!(["ops"]);
         let spec = ProjectionSpec {
-            audience: Some("nobody-tagged-this".into()),
+            audience: Some("ops".into()),
             ..Default::default()
         };
-        let out = project(&audience_master(), &spec).unwrap();
+        let out = project(&master, &spec).unwrap();
         assert_eq!(work_names(&out), vec!["Untagged Corp"]);
+    }
+
+    #[test]
+    fn audience_matching_no_tag_is_an_error_listing_known_audiences() {
+        // #246: a typo would otherwise yield a plausible, un-tailored cut.
+        let spec = ProjectionSpec {
+            audience: Some("securty".into()),
+            ..Default::default()
+        };
+        let err = project(&audience_master(), &spec).unwrap_err();
+        assert_eq!(
+            err,
+            ProjectionError::UnknownAudience {
+                audience: "securty".into(),
+                known: vec!["leadership".into(), "security".into()],
+            }
+        );
+        assert_eq!(
+            err.to_string(),
+            "audience \"securty\" matches no x-ferrocv tags in the document; \
+             known audiences: \"leadership\", \"security\""
+        );
+    }
+
+    #[test]
+    fn audience_on_untagged_document_is_an_error() {
+        let doc = json!({ "work": [{ "name": "Plain Corp" }] });
+        let spec = ProjectionSpec {
+            audience: Some("security".into()),
+            ..Default::default()
+        };
+        let err = project(&doc, &spec).unwrap_err();
+        assert_eq!(
+            err,
+            ProjectionError::UnknownAudience {
+                audience: "security".into(),
+                known: vec![],
+            }
+        );
+        assert!(
+            err.to_string()
+                .ends_with("the document has no x-ferrocv audience tags")
+        );
     }
 
     #[test]
@@ -767,14 +877,17 @@ mod tests {
         // An explicit `audience: []` means "for everyone", never
         // "exclude from all" (ADR 0004 pins `[]` to universal).
         let doc = json!({
-            "work": [{ "name": "Everyone", "x-ferrocv": { "audience": [] } }]
+            "work": [
+                { "name": "Everyone", "x-ferrocv": { "audience": [] } },
+                { "name": "Sec", "x-ferrocv": { "audience": ["security"] } }
+            ]
         });
         let spec = ProjectionSpec {
             audience: Some("security".into()),
             ..Default::default()
         };
         let out = project(&doc, &spec).unwrap();
-        assert_eq!(work_names(&out), vec!["Everyone"]);
+        assert_eq!(work_names(&out), vec!["Everyone", "Sec"]);
     }
 
     #[test]
@@ -824,7 +937,8 @@ mod tests {
         // consumed x-ferrocv control metadata must still be stripped so a
         // derived cut never leaks the targeting topology.
         let doc = json!({
-            "basics": { "name": "Grace", "x-ferrocv": { "note": "internal" } }
+            "basics": { "name": "Grace", "x-ferrocv": { "note": "internal" } },
+            "work": [{ "name": "Sec", "x-ferrocv": { "audience": ["security"] } }]
         });
         let spec = ProjectionSpec {
             audience: Some("security".into()),
