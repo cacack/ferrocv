@@ -136,6 +136,89 @@ fn tailor_rejects_malformed_collapse_before() {
 }
 
 #[test]
+fn tailor_section_max_bullets_caps_only_that_section() {
+    // #256: `--max-bullets 1 --max-bullets volunteer=0` empties volunteer
+    // bullets (the section cap overrides the plain one) and caps work at 1.
+    let assert = ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--max-bullets")
+        .arg("1")
+        .arg("--max-bullets")
+        .arg("volunteer=0")
+        .assert()
+        .success();
+    let doc: Value =
+        serde_json::from_slice(&assert.get_output().stdout).expect("stdout is valid JSON");
+    assert_eq!(
+        doc["volunteer"][0]["highlights"],
+        serde_json::json!([]),
+        "volunteer bullets stripped"
+    );
+    assert_eq!(work_highlights(&doc, 0), vec!["Led the platform rewrite"]);
+}
+
+#[test]
+fn tailor_section_max_bullets_alone_leaves_other_sections_whole() {
+    let assert = ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--max-bullets")
+        .arg("volunteer=0")
+        .assert()
+        .success();
+    let doc: Value =
+        serde_json::from_slice(&assert.get_output().stdout).expect("stdout is valid JSON");
+    assert_eq!(
+        doc["volunteer"][0]["highlights"],
+        serde_json::json!([]),
+        "named section emptied"
+    );
+    // Every work entry keeps its full bullet list (3 entries; 4, 3, 2).
+    for (index, expected) in [(0, 4), (1, 3), (2, 2)] {
+        assert_eq!(
+            work_highlights(&doc, index).len(),
+            expected,
+            "work[{index}] untouched"
+        );
+    }
+}
+
+#[test]
+fn tailor_max_bullets_rejects_bad_values_as_usage_errors() {
+    // Unknown section, non-number, repeated plain N, repeated section:
+    // all exit 2 with nothing on stdout.
+    let cases: &[(&[&str], &str)] = &[
+        (
+            &["--max-bullets", "awards=1"],
+            "expected one of: work, volunteer, projects",
+        ),
+        (
+            &["--max-bullets", "projects=lots"],
+            "not a non-negative integer",
+        ),
+        (
+            &["--max-bullets", "2", "--max-bullets", "3"],
+            "--max-bullets N given more than once",
+        ),
+        (
+            &["--max-bullets", "work=1", "--max-bullets", "work=2"],
+            "--max-bullets work=N given more than once",
+        ),
+    ];
+    for (args, message) in cases {
+        ferrocv()
+            .arg("tailor")
+            .arg(fixture("master_projection"))
+            .args(*args)
+            .assert()
+            .code(2)
+            .stdout(predicate::str::is_empty())
+            .stderr(predicate::str::contains(*message));
+    }
+}
+
+#[test]
 fn tailor_max_bullets_caps_highlights() {
     // --max-bullets 2: every highlights array capped to its first 2
     // entries, by position.
