@@ -26,8 +26,11 @@ text via the native `text-minimal` default, and HTML via the native
 tooling are tracked as
 [GitHub issues](https://github.com/cacack/ferrocv/issues) and
 organized into version milestones. HTML uses Typst's upstream-experimental
-HTML export — output shape may shift when Typst is bumped; the CLI
-surface itself is stable. The non-negotiable design principles live in
+HTML export — output shape may shift when Typst is bumped. While
+`ferrocv` is 0.x, CLI flags and subcommands are stable, but default
+themes and rendered appearance may change between minor releases; such
+changes are flagged as breaking in the [changelog](./CHANGELOG.md). The
+non-negotiable design principles live in
 [`CONSTITUTION.md`](./CONSTITUTION.md).
 
 ## Why
@@ -292,7 +295,9 @@ and fonts are all compiled into the binary, and any `@preview/...`
 theme spec is resolved from the local install cache. The only
 network-permitted entry point is `themes install` (gated behind the
 `install` Cargo feature), which fetches from the Typst Universe
-registry over HTTPS; see CONSTITUTION §6.1.
+registry over HTTPS; see CONSTITUTION §6.1. Release binaries are
+SHA256-checksummed but not signed or attested, and `themes install`
+relies on TLS alone for integrity; see [`SECURITY.md`](./SECURITY.md).
 
 ## GitHub Actions
 

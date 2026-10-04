@@ -85,6 +85,8 @@ exists only to point at it.
   - Hidden: `docs`, `refactor`, `ci`, `chore`
   - `feat` and `fix` are reserved for user-facing changes; tooling and
     build changes are `ci` or `chore`.
+  - Changes to default output (default theme, rendered appearance) use
+    `feat!` / a `BREAKING CHANGE:` footer.
 - **PR titles**: descriptive prose, **not** Conventional Commits format.
   release-please reads conventional types from the commit log; mirroring
   them in PR titles produces duplicate changelog entries on squash merge.
