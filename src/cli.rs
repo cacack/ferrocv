@@ -58,9 +58,9 @@ enum Commands {
     /// (`./resume.typ`), absolute (`/abs/path/resume.typ`), or any
     /// string ending in `.typ` or containing a path separator — in
     /// which case the file's bytes are loaded at invocation time and
-    /// run under the same Typst sandbox bundled themes do. Single
-    /// `.typ` files only for now; directory-based local themes land
-    /// in a follow-up on issue #41. To force a bare name with no
+    /// run under the same Typst sandbox bundled themes do. Local themes
+    /// are single `.typ` files (a directory is rejected); combine a
+    /// multi-file theme into one file. To force a bare name with no
     /// path-like signals to resolve as a local file, prefix it with
     /// `./` or give it a `.typ` extension.
     ///
@@ -142,15 +142,13 @@ enum Commands {
         #[arg(short = 'o', long)]
         output: Option<PathBuf>,
     },
-    /// List themes bundled with this build.
+    /// List, scaffold, or install themes.
     ///
     /// `themes list` prints theme names one per line, sorted
     /// lexicographically, to stdout with no decoration — a stable
-    /// machine-readable contract.
-    ///
-    /// The nested-verb form (`themes list` rather than bare `themes`)
-    /// leaves room for a sibling `themes install <spec>` subcommand
-    /// when issue #41 adds remote-fetchable themes.
+    /// machine-readable contract. `themes new` scaffolds a native theme
+    /// to edit. `themes install` (only in builds with the `install`
+    /// feature) fetches a Typst Universe package into the local cache.
     Themes {
         #[command(subcommand)]
         command: ThemesCommands,

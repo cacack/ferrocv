@@ -9,14 +9,14 @@ in this repository.
 documents to PDF, HTML, and plain text via [Typst](https://typst.app/),
 embedded in-process via the `typst` crate.
 
-PDF, plain-text, and HTML rendering all ship today (current release
-v0.6.0). The differentiating capability — **targeted projection**
-(maintain one master `resume.json`, emit audience-specific cuts;
-CONSTITUTION §7) — is the next headline feature, tracked under the
-`v0.8.0` milestone, and not yet built. The roadmap and unresolved
-design questions live in [GitHub
-issues](https://github.com/cacack/ferrocv/issues). `README.md` is the
-user-facing entrypoint.
+PDF, plain-text, and HTML rendering all ship, as does the
+differentiating capability — **targeted projection** (maintain one
+master `resume.json`, emit audience-specific cuts; CONSTITUTION §7):
+the `tailor` subcommand and the matching projection flags on `render`,
+implemented in `src/project.rs`. The current version is in
+`Cargo.toml`; what's next lives in [GitHub
+issues](https://github.com/cacack/ferrocv/issues) and their version
+milestones. `README.md` is the user-facing entrypoint.
 
 ## Commands
 
@@ -95,8 +95,8 @@ exists only to point at it.
 
 ## Related repos
 
-- [`resume`](https://github.com/chrisclonch/resume) — Chris's own
-  `resume.json`, currently using the JS-based `resumed` + Playwright
-  pipeline. The original design discussion that produced `ferrocv`
-  lives in that repo's `NOTES.md`. Once `ferrocv` is usable, the
-  `resume` repo will switch to it.
+- `resume` (the author's private repo) — Chris's own master
+  `resume.json`, rendered with pinned `ferrocv` release binaries. It is
+  the first real user of projection, so its needs drive §7 work. The
+  original design discussion that produced `ferrocv` lives in that
+  repo's `NOTES.md`.
