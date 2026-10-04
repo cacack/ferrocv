@@ -586,3 +586,54 @@ fn tailor_audience_highlights_mismatch_is_data_error_exit_1() {
         .stdout(predicate::str::is_empty())
         .stderr(predicate::str::contains("Misaligned Corp"));
 }
+
+/// Names of the entries in a derived top-level array (e.g. `projects`).
+fn entry_names(doc: &Value, section: &str) -> Vec<String> {
+    doc[section]
+        .as_array()
+        .unwrap_or_else(|| panic!("{section} is an array"))
+        .iter()
+        .map(|e| e["name"].as_str().expect("entry has a name").to_owned())
+        .collect()
+}
+
+#[test]
+fn tailor_audience_drops_whole_project_entry_tagged_for_other_audiences() {
+    // #195: an entry-level x-ferrocv.audience tag on any top-level array
+    // entry — here `projects` — drops the whole entry from cuts for
+    // audiences it does not list; untagged entries stay universal. The
+    // `work` entry's tag makes `leadership` a known audience (#246).
+    let master = serde_json::json!({
+        "basics": { "name": "Jane Doe" },
+        "work": [
+            { "name": "Acme", "x-ferrocv": { "audience": ["leadership"] } }
+        ],
+        "projects": [
+            { "name": "Model Eval Harness", "x-ferrocv": { "audience": ["ai"] } },
+            { "name": "Build Cache" }
+        ]
+    })
+    .to_string();
+    let tailor = |audience: &str| -> Value {
+        let assert = ferrocv()
+            .arg("tailor")
+            .arg("--audience")
+            .arg(audience)
+            .write_stdin(master.clone())
+            .assert()
+            .success()
+            .stderr(predicate::str::is_empty());
+        serde_json::from_slice(&assert.get_output().stdout).expect("stdout is valid JSON")
+    };
+
+    let leadership = tailor("leadership");
+    assert_eq!(entry_names(&leadership, "projects"), vec!["Build Cache"]);
+    assert!(!contains_x_ferrocv_key(&leadership));
+
+    let ai = tailor("ai");
+    assert_eq!(
+        entry_names(&ai, "projects"),
+        vec!["Model Eval Harness", "Build Cache"]
+    );
+    assert!(!contains_x_ferrocv_key(&ai));
+}
