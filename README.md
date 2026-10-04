@@ -12,8 +12,10 @@
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/cacack/ferrocv/badge)](https://scorecard.dev/viewer/?uri=github.com/cacack/ferrocv)
 [![Conventional Commits](https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg)](https://www.conventionalcommits.org)
 
-Render [JSON Resume](https://jsonresume.org/) to PDF, HTML, and text via
-[Typst](https://typst.app/) — single static binary, no Node or TeX required.
+Maintain one master [JSON Resume](https://jsonresume.org/) `resume.json`
+and emit targeted, audience-specific cuts from it — then render them to
+PDF, HTML, and text via [Typst](https://typst.app/). Single static
+binary, no Node or TeX required.
 
 ## Status
 
@@ -42,6 +44,9 @@ schema and replaces the rendering pipeline with something more robust:
 
 ## Goals
 
+- Project one master `resume.json` into targeted, audience-specific cuts
+  (curated by audience tags, or mechanically by date, bullet count, and
+  PII) — see [Projection](#projection-one-master-many-cuts).
 - Validate `resume.json` against the JSON Resume schema.
 - Compile to PDF in-process via the `typst` crate (no subprocess).
 - Emit HTML and plain text as first-class outputs, not afterthoughts.
@@ -49,6 +54,33 @@ schema and replaces the rendering pipeline with something more robust:
   visual variety from day one.
 - Define a native theme contract so new themes can target JSON Resume
   directly.
+
+## Install
+
+**Prebuilt binaries.** Each [GitHub
+release](https://github.com/cacack/ferrocv/releases) ships an archive
+per platform — `ferrocv-x86_64-unknown-linux-gnu.tar.gz`,
+`ferrocv-aarch64-apple-darwin.tar.gz`, and
+`ferrocv-x86_64-pc-windows-msvc.zip` — each with a `.sha256` sidecar.
+Verify before extracting:
+
+```sh
+sha256sum -c ferrocv-x86_64-unknown-linux-gnu.sha256   # Linux
+shasum -a 256 -c ferrocv-aarch64-apple-darwin.sha256   # macOS
+tar -xzf ferrocv-x86_64-unknown-linux-gnu.tar.gz ferrocv
+```
+
+**From crates.io:**
+
+```sh
+cargo install ferrocv                     # default, fully offline build
+cargo install ferrocv --features install  # adds `ferrocv themes install`
+```
+
+Prebuilt binaries and a plain `cargo install ferrocv` are built without
+the `install` feature, so they have no network code and no `themes
+install` subcommand (nor `--theme @preview/...` resolution). Use the
+`--features install` build if you want to pull Typst Universe packages.
 
 ## Usage
 
@@ -338,19 +370,29 @@ make coverage
 - Replacing the JSON Resume schema or project.
 - Supporting arbitrary input formats (Markdown, YAML, etc.).
 - Becoming a general-purpose Typst build tool.
+- Authoring or rewriting resume content. Projection selects and omits
+  from the master you wrote; it never rewrites, summarizes, or generates
+  bullets, and makes no AI/LLM calls.
+- A hosted service, web UI, or SaaS wrapper.
+
+See [`CONSTITUTION.md`](./CONSTITUTION.md#non-goals) for the full list.
 
 ## Prior art
 
 - [`fruggiero/typst-jsonresume-cv`](https://github.com/fruggiero/typst-jsonresume-cv)
-  — Typst template that accepts JSON Resume data.
+  — Typst template that accepts JSON Resume data. ferrocv bundles it as
+  an adapter and adds schema validation, projection, and a CLI.
 - [`fantastic-cv`](https://typst.app/universe/package/fantastic-cv/),
   [`modern-cv`](https://typst.app/universe/package/modern-cv/), and
   [`basic-resume`](https://typst.app/universe/package/basic-resume/)
-  — Typst Universe resume templates wrapped as bundled adapters.
+  — Typst Universe resume templates. ferrocv wraps them as bundled
+  adapters, fed from JSON Resume instead of hand-edited Typst.
 - [`jsonresume-renderer`](https://lib.rs/crates/jsonresume-renderer)
-  — Rust CLI that renders JSON Resume via Tera templates (not Typst).
+  — Rust CLI that renders JSON Resume via Tera templates. ferrocv uses
+  embedded Typst instead and adds projection into tailored cuts.
 - [`typst.ts`](https://github.com/Myriad-Dreamin/typst.ts) — proves Typst
-  is embeddable outside its native CLI.
+  is embeddable outside its native CLI. ferrocv embeds the `typst`
+  crate directly in a native, resume-focused binary.
 
 ## License
 
