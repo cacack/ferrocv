@@ -15,7 +15,7 @@
 
 use std::path::PathBuf;
 
-use ferrocv::{ProjectionError, ProjectionSpec, RedactSet, project, validate_value};
+use ferrocv::{BulletSection, ProjectionError, ProjectionSpec, RedactSet, project, validate_value};
 use serde_json::Value;
 
 /// Load a fixture document by filename stem (no extension).
@@ -104,6 +104,11 @@ fn every_filter_and_combination_revalidates() {
             "collapse_before=2015",
             collapse_before(spec(None, None, None, false), "2015"),
         ),
+        ("max_bullets volunteer=0", {
+            let mut s = spec(None, None, Some(2), false);
+            s.max_bullets_by_section.insert(BulletSection::Volunteer, 0);
+            s
+        }),
         (
             "all-filters-combined",
             spec(Some("security"), Some("2015"), Some(2), true),

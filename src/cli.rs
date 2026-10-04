@@ -15,6 +15,7 @@
 //!   error, malformed JSON, unknown theme, unknown format, or Typst
 //!   render error
 
+use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -24,9 +25,9 @@ use clap::{Args, Parser, Subcommand};
 use serde_json::Value;
 
 use crate::{
-    ProjectionError, ProjectionSpec, RedactSet, THEMES, ThemeResolveError, ValidationError,
-    compile_html_resolved, compile_text_resolved, compile_theme_resolved, project, resolve_theme,
-    validate_value,
+    BulletSection, ProjectionError, ProjectionSpec, RedactSet, THEMES, ThemeResolveError,
+    ValidationError, compile_html_resolved, compile_text_resolved, compile_theme_resolved, project,
+    resolve_theme, validate_value,
 };
 
 /// Render JSON Resume documents via embedded Typst.
@@ -290,10 +291,13 @@ struct ProjectionArgs {
     /// oldest, collapse the middle). A malformed value is a usage error.
     #[arg(long, value_name = "DATE")]
     collapse_before: Option<String>,
-    /// Cap each entry's `highlights` list at N bullets, keeping the
-    /// first N by position. `0` removes all highlights.
-    #[arg(long, value_name = "N")]
-    max_bullets: Option<usize>,
+    /// Cap `highlights` lists at N bullets, keeping the first N by
+    /// position; `0` removes them. `N` applies to work, volunteer, and
+    /// projects; `SECTION=N` caps one of those sections and overrides a
+    /// plain `N` for it. Repeatable, e.g. `--max-bullets 4 --max-bullets
+    /// projects=0`. A plain `N` or a section may each be given once.
+    #[arg(long, value_name = "N|SECTION=N", value_parser = parse_max_bullets)]
+    max_bullets: Vec<MaxBulletsArg>,
     /// Redact a named set of PII fields. `pii` removes
     /// `basics.location`, `basics.phone`, and `basics.email`.
     #[arg(long, value_enum)]
@@ -302,17 +306,78 @@ struct ProjectionArgs {
 
 impl ProjectionArgs {
     /// Translate the parsed CLI flags into a library [`ProjectionSpec`].
-    fn to_spec(&self) -> ProjectionSpec {
-        ProjectionSpec {
+    ///
+    /// Fails (as a usage error) when `--max-bullets` repeats a plain `N`
+    /// or the same section: which value should win is ambiguous, so we
+    /// refuse rather than silently pick one.
+    fn to_spec(&self) -> Result<ProjectionSpec, String> {
+        let mut max_bullets = None;
+        let mut max_bullets_by_section = BTreeMap::new();
+        for arg in &self.max_bullets {
+            match *arg {
+                MaxBulletsArg::All(n) => {
+                    if max_bullets.replace(n).is_some() {
+                        return Err("--max-bullets N given more than once".to_owned());
+                    }
+                }
+                MaxBulletsArg::Section(section, n) => {
+                    if max_bullets_by_section.insert(section, n).is_some() {
+                        return Err(format!(
+                            "--max-bullets {}=N given more than once",
+                            section.as_key()
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(ProjectionSpec {
             audience: self.audience.clone(),
             since: self.since.clone(),
             collapse_before: self.collapse_before.clone(),
-            max_bullets: self.max_bullets,
+            max_bullets,
+            max_bullets_by_section,
             redact: self.redact.map(|r| match r {
                 RedactArg::Pii => RedactSet::Pii,
             }),
-        }
+        })
     }
+}
+
+/// One `--max-bullets` value: a plain cap for every section, or a cap
+/// for one section (#256).
+#[derive(Debug, Clone, Copy)]
+enum MaxBulletsArg {
+    All(usize),
+    Section(BulletSection, usize),
+}
+
+/// Parse `N` or `SECTION=N` for `--max-bullets`.
+fn parse_max_bullets(value: &str) -> Result<MaxBulletsArg, String> {
+    let parse_n = |n: &str| {
+        n.parse::<usize>()
+            .map_err(|_| format!("{n:?} is not a non-negative integer"))
+    };
+    let Some((name, n)) = value.split_once('=') else {
+        return parse_n(value).map(MaxBulletsArg::All);
+    };
+    let section = BulletSection::ALL
+        .into_iter()
+        .find(|s| s.as_key() == name)
+        .ok_or_else(|| {
+            let valid: Vec<&str> = BulletSection::ALL.iter().map(|s| s.as_key()).collect();
+            format!(
+                "unknown section {name:?}; expected one of: {}",
+                valid.join(", ")
+            )
+        })?;
+    Ok(MaxBulletsArg::Section(section, parse_n(n)?))
+}
+
+/// Report a flag-value conflict that clap can't see on its own and exit
+/// with the usage-error code (2), before any document is read.
+fn usage_error(msg: &str) -> Result<ExitCode> {
+    eprintln!("error: {msg}; no output written");
+    Ok(ExitCode::from(2))
 }
 
 /// Map a [`ProjectionError`] to its process exit code.
@@ -384,18 +449,24 @@ pub fn run() -> Result<ExitCode> {
             format,
             output,
             projection,
-        } => run_render(
-            path.as_deref(),
-            theme.as_deref(),
-            format,
-            output.as_deref(),
-            &projection.to_spec(),
-        ),
+        } => match projection.to_spec() {
+            Ok(spec) => run_render(
+                path.as_deref(),
+                theme.as_deref(),
+                format,
+                output.as_deref(),
+                &spec,
+            ),
+            Err(msg) => usage_error(&msg),
+        },
         Commands::Tailor {
             path,
             projection,
             output,
-        } => run_tailor(path.as_deref(), &projection.to_spec(), output.as_deref()),
+        } => match projection.to_spec() {
+            Ok(spec) => run_tailor(path.as_deref(), &spec, output.as_deref()),
+            Err(msg) => usage_error(&msg),
+        },
         Commands::Themes { command } => match command {
             ThemesCommands::List => run_themes_list(),
             ThemesCommands::New { name, out } => run_themes_new(&name, out.as_deref()),

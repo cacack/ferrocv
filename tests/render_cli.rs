@@ -990,6 +990,56 @@ fn render_with_collapse_before_shows_role_without_its_bullets() {
 }
 
 #[test]
+fn render_with_section_max_bullets_omits_only_that_sections_bullets() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("master_projection"))
+        .arg("--max-bullets")
+        .arg("volunteer=0")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success();
+    let text = std::fs::read_to_string(&out).expect("read output");
+    assert!(
+        text.contains("Code Mentors"),
+        "volunteer entry still rendered"
+    );
+    assert!(
+        !text.contains("Ran weekly office hours"),
+        "volunteer bullets must not render"
+    );
+    assert!(
+        text.contains("Shipped the billing service"),
+        "work bullets untouched"
+    );
+}
+
+#[test]
+fn render_rejects_repeated_max_bullets_section_with_no_output() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("master_projection"))
+        .arg("--max-bullets")
+        .arg("projects=0")
+        .arg("--max-bullets")
+        .arg("projects=1")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(2);
+    assert!(!out.exists(), "no output file on a usage error");
+}
+
+#[test]
 fn render_with_max_bullets_and_redact_succeeds() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = tmp.path().join("out.txt");

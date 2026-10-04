@@ -20,7 +20,8 @@
 //! - [`ProjectionSpec::collapse_before`] — keep `work` entries that ended
 //!   before a cutoff date, but omit their `highlights` and `summary`.
 //! - [`ProjectionSpec::max_bullets`] — cap every `highlights` array at
-//!   the first N entries by position.
+//!   the first N entries by position;
+//!   [`ProjectionSpec::max_bullets_by_section`] overrides it per section.
 //! - [`ProjectionSpec::redact`] — remove named PII fields from `basics`.
 //!
 //! Selection lives here in Rust, never in themes (§4/§5): a theme only
@@ -34,7 +35,7 @@
 //! `render` projection flags (ADR 0005) — call [`project`], so the two
 //! are equivalent by construction.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use serde_json::Value;
@@ -52,8 +53,43 @@ pub enum RedactSet {
     Pii,
 }
 
+/// A section whose bare-string `highlights` the bullet cap applies to —
+/// the stock JSON Resume v1.0.0 sections that carry one.
+///
+/// Marked `#[non_exhaustive]` so a section added later is not a breaking
+/// change for out-of-crate callers that match on it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub enum BulletSection {
+    /// `work`
+    Work,
+    /// `volunteer`
+    Volunteer,
+    /// `projects`
+    Projects,
+}
+
+impl BulletSection {
+    /// Every capped section, in document order.
+    pub const ALL: [BulletSection; 3] = [
+        BulletSection::Work,
+        BulletSection::Volunteer,
+        BulletSection::Projects,
+    ];
+
+    /// The section's top-level key in a JSON Resume document.
+    pub fn as_key(self) -> &'static str {
+        match self {
+            BulletSection::Work => "work",
+            BulletSection::Volunteer => "volunteer",
+            BulletSection::Projects => "projects",
+        }
+    }
+}
+
 /// The projection selection spec: the curated `audience` filter (#149)
-/// plus the mechanical `since` / `max_bullets` / `redact` filters (#148).
+/// plus the mechanical `since` / `collapse_before` / `max_bullets` (and
+/// per-section `max_bullets_by_section`) / `redact` filters.
 ///
 /// An all-`None` spec is a no-op: [`project`] returns the input
 /// unchanged (structurally).
@@ -89,9 +125,17 @@ pub struct ProjectionSpec {
     /// entries are never collapsed. Field omission only — CONSTITUTION §7:
     /// projection never generates, summarizes, or rewrites text.
     pub collapse_before: Option<String>,
-    /// Cap every `highlights` array at this many entries (first N by
-    /// position). `0` empties them.
+    /// Default cap for `highlights` arrays (first N by position; `0`
+    /// empties them), applied to every [`BulletSection`] that has no entry
+    /// in `max_bullets_by_section`.
     pub max_bullets: Option<usize>,
+    /// Per-section caps that override `max_bullets` for their section
+    /// (#256) — e.g. `Projects => 0` strips project bullets while work
+    /// keeps its own (or no) cap. A cap for a section the document lacks
+    /// is a no-op. Being a map, it holds one cap per section; rejecting a
+    /// repeated section is the caller's job (the CLI treats it as a usage
+    /// error rather than letting the last one silently win).
+    pub max_bullets_by_section: BTreeMap<BulletSection, usize>,
     /// Redact a named set of PII fields from `basics`.
     pub redact: Option<RedactSet>,
 }
@@ -283,9 +327,7 @@ pub fn project(doc: &Value, spec: &ProjectionSpec) -> Result<Value, ProjectionEr
     if let Some(cutoff) = &spec.collapse_before {
         apply_collapse_before(&mut out, cutoff);
     }
-    if let Some(n) = spec.max_bullets {
-        apply_max_bullets(&mut out, n);
-    }
+    apply_max_bullets(&mut out, spec.max_bullets, &spec.max_bullets_by_section);
     if let Some(redact) = spec.redact {
         apply_redact(&mut out, redact);
     }
@@ -562,17 +604,26 @@ enum Bound {
     Latest,
 }
 
-/// Cap every bare-string `highlights` array at `n` entries (first N).
+/// Cap bare-string `highlights` arrays (first N by position).
 ///
 /// Applies to the stock JSON Resume v1.0.0 sections that carry a
-/// bare-string `highlights` array — `work`, `volunteer`, `projects`.
+/// bare-string `highlights` array — `work`, `volunteer`, `projects`. Each
+/// section uses its `by_section` cap if one is set, else `all`; a section
+/// with neither is left untouched.
 /// The index-parallel `x-ferrocv.highlights` tag array (an array *of
 /// arrays*, nested under `x-ferrocv`) is a sibling key and is left
 /// untouched; mechanical filters do not consume tags — that is
 /// [`apply_audience`]'s job, and it runs first (see [`project`]).
-fn apply_max_bullets(out: &mut Value, n: usize) {
-    for section in ["work", "volunteer", "projects"] {
-        if let Some(entries) = out.get_mut(section).and_then(Value::as_array_mut) {
+fn apply_max_bullets(
+    out: &mut Value,
+    all: Option<usize>,
+    by_section: &BTreeMap<BulletSection, usize>,
+) {
+    for section in BulletSection::ALL {
+        let Some(n) = by_section.get(&section).copied().or(all) else {
+            continue;
+        };
+        if let Some(entries) = out.get_mut(section.as_key()).and_then(Value::as_array_mut) {
             for entry in entries {
                 if let Some(highlights) = entry.get_mut("highlights").and_then(Value::as_array_mut)
                 {
@@ -761,6 +812,7 @@ mod tests {
             since: Some("2015".into()),
             collapse_before: Some("2018".into()),
             max_bullets: Some(1),
+            max_bullets_by_section: BTreeMap::from([(BulletSection::Volunteer, 0)]),
             redact: Some(RedactSet::Pii),
         };
         let _ = project(&doc, &spec).unwrap();
@@ -850,6 +902,60 @@ mod tests {
         };
         let out = project(&master(), &spec).unwrap();
         assert!(out["work"][0].get("x-ferrocv").is_some());
+    }
+
+    fn section_caps(caps: &[(BulletSection, usize)]) -> BTreeMap<BulletSection, usize> {
+        caps.iter().copied().collect()
+    }
+
+    #[test]
+    fn section_cap_applies_to_that_section_only() {
+        // #256: a section cap touches only the section it names — checked
+        // against all three capped sections, so a cap leaking into either
+        // neighbour fails.
+        let doc = json!({
+            "work": [{ "name": "W", "highlights": ["w1", "w2"] }],
+            "volunteer": [{ "organization": "V", "highlights": ["v1", "v2"] }],
+            "projects": [{ "name": "P", "highlights": ["p1", "p2"] }]
+        });
+        let spec = ProjectionSpec {
+            max_bullets_by_section: section_caps(&[(BulletSection::Volunteer, 0)]),
+            ..Default::default()
+        };
+        let out = project(&doc, &spec).unwrap();
+        assert_eq!(highlights(&out["volunteer"][0]), Vec::<String>::new());
+        assert_eq!(highlights(&out["work"][0]), vec!["w1", "w2"]);
+        assert_eq!(highlights(&out["projects"][0]), vec!["p1", "p2"]);
+    }
+
+    #[test]
+    fn section_cap_overrides_the_plain_cap_for_its_section() {
+        let spec = ProjectionSpec {
+            max_bullets: Some(1),
+            max_bullets_by_section: section_caps(&[(BulletSection::Work, 3)]),
+            ..Default::default()
+        };
+        let out = project(&master(), &spec).unwrap();
+        assert_eq!(highlights(&out["work"][0]), vec!["a", "b", "c"]);
+        assert_eq!(highlights(&out["volunteer"][0]), vec!["x"]);
+    }
+
+    #[test]
+    fn projects_zero_strips_project_bullets_and_keeps_the_rest() {
+        // The curated-cut shape from the `resume` repo: project bullets
+        // gone, name and description kept, work untouched.
+        let doc = json!({
+            "work": [{ "name": "W", "highlights": ["w1", "w2"] }],
+            "projects": [{ "name": "P", "description": "d", "highlights": ["p1"] }]
+        });
+        let spec = ProjectionSpec {
+            max_bullets_by_section: section_caps(&[(BulletSection::Projects, 0)]),
+            ..Default::default()
+        };
+        let out = project(&doc, &spec).unwrap();
+        assert_eq!(highlights(&out["projects"][0]), Vec::<String>::new());
+        assert_eq!(out["projects"][0]["description"], "d");
+        assert_eq!(highlights(&out["work"][0]), vec!["w1", "w2"]);
     }
 
     #[test]

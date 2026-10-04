@@ -176,7 +176,13 @@ rule rather than by tag. They compose with `--audience` (and each other):
   summarizes them.
 - **`--max-bullets <N>`** — cap every `highlights` list at the first N
   bullets. It runs **after** `--audience`, so it caps the
-  already-curated set.
+  already-curated set. Use `SECTION=N` (`work`, `volunteer`, or
+  `projects`) to cap one section instead; it overrides a plain `N` for
+  that section and the flag is repeatable. `--max-bullets projects=0`
+  shows every project as name and description only. Give the plain `N`
+  and each section at most once — repeating one is a usage error (exit
+  2), not "last one wins". A cap for a section your master doesn't have
+  does nothing.
 - **`--redact pii`** — remove `basics.location`, `basics.phone`, and
   `basics.email` from the cut. Identity fields (`name`, `label`,
   `summary`, `url`, `profiles`) are kept. Useful for a resume you post
@@ -186,6 +192,10 @@ rule rather than by tag. They compose with `--audience` (and each other):
 # Security cut, last decade only, two bullets max, contact info stripped:
 ferrocv tailor examples/master.resume.json \
   --audience security --since 2016 --max-bullets 2 --redact pii -o public-security.json
+
+# Compact cut: older roles as one-liners, projects without bullets:
+ferrocv render examples/master.resume.json \
+  --collapse-before 2016 --max-bullets projects=0 --format pdf -o compact.pdf
 ```
 
 ## Tags are stripped from the cut

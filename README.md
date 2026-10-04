@@ -153,9 +153,13 @@ The **mechanical** filters (theme-agnostic):
   that ended before the cutoff as one-liners: `highlights` and `summary`
   are omitted, name/position/dates kept. Field omission only — nothing
   is rewritten.
-- `--max-bullets <N>` — cap every `highlights` list at the first N
-  bullets. Runs *after* `--audience`, so it caps the already-curated
-  set.
+- `--max-bullets <N|SECTION=N>` — cap every `highlights` list at the
+  first N bullets, or just one section's (`work`, `volunteer`,
+  `projects`) with `SECTION=N`. Repeatable; a section cap overrides a
+  plain `N` (e.g. `--max-bullets 4 --max-bullets projects=0`). Give the
+  plain `N` and each section at most once — a repeat is a usage error
+  (exit 2) rather than "last one wins". Runs *after* `--audience`, so it
+  caps the already-curated set.
 - `--redact pii` — remove `basics.location`, `basics.phone`, and
   `basics.email` from the cut. Identity fields (`name`, `label`,
   `summary`, `url`, `profiles`) are kept.
