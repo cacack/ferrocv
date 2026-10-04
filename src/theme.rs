@@ -57,11 +57,11 @@
 //!   out of [`THEMES`] by name (the legacy path, byte-for-byte
 //!   equivalent to calling [`find_theme`]).
 //! - [`ResolvedTheme::Owned`] wraps an [`OwnedTheme`] assembled at
-//!   runtime from bytes the CLI read off the filesystem. v1 of the
-//!   local-path feature accepts a single `.typ` file; directory-based
-//!   themes are rejected with a clear error pointing at the follow-up
-//!   issue. No sibling imports, no package resolver — the file runs
-//!   under exactly the same Typst sandbox bundled themes do.
+//!   runtime from bytes the CLI read off the filesystem. The
+//!   local-path feature accepts a single `.typ` file; a directory is
+//!   rejected with a clear error. No sibling imports, no package
+//!   resolver — the file runs under exactly the same Typst sandbox
+//!   bundled themes do.
 //!
 //! `@preview/<name>:<version>` specs route through the offline
 //! installer cache populated by `ferrocv themes install` (Stage B).
@@ -600,8 +600,8 @@ pub enum ThemeResolveError {
     },
     /// A local-path spec resolved to an existing filesystem entry
     /// that is not a regular `.typ` file — typically a directory or a
-    /// file without the `.typ` extension. Directory-based local themes
-    /// are tracked as a follow-up on issue #41.
+    /// file without the `.typ` extension. Local themes are single
+    /// `.typ` files; directories are not supported.
     LocalPathNotAFile {
         /// The path the user typed, as given.
         path: std::path::PathBuf,
@@ -689,8 +689,7 @@ impl std::fmt::Display for ThemeResolveError {
             ThemeResolveError::LocalPathNotAFile { path } => write!(
                 f,
                 "local-path theme must point to a .typ file, not a directory or non-.typ file: {} \
-                 (directory-based local themes are tracked as a follow-up on issue #41; \
-                 for now concatenate your theme into a single .typ file)",
+                 (local themes are single files; combine a multi-file theme into one .typ file)",
                 path.display()
             ),
             ThemeResolveError::LocalPathNotFound { path } => {

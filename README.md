@@ -23,7 +23,7 @@ text via the native `text-minimal` default, and HTML via the native
 `html-minimal` semantic theme). Additional themes and native-theme
 tooling are tracked as
 [GitHub issues](https://github.com/cacack/ferrocv/issues) and
-organized into phase milestones. HTML uses Typst's upstream-experimental
+organized into version milestones. HTML uses Typst's upstream-experimental
 HTML export — output shape may shift when Typst is bumped; the CLI
 surface itself is stable. The non-negotiable design principles live in
 [`CONSTITUTION.md`](./CONSTITUTION.md).
@@ -276,9 +276,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cacack/ferrocv/.github/actions/setup-ferrocv@v0.4.0
+      - uses: cacack/ferrocv/.github/actions/setup-ferrocv@v0.10.1 # x-release-please-version
         with:
-          version: v0.4.0
+          version: v0.10.1 # x-release-please-version
       - run: ferrocv validate resume.json
       - run: ferrocv render resume.json --theme typst-jsonresume-cv --output dist/resume.pdf
       - uses: actions/upload-artifact@v4
@@ -295,7 +295,9 @@ binary under `${{ runner.temp }}/ferrocv-bin`. It also exposes a
 `bin-path` output for workflows that need the absolute path.
 
 Pin the action ref and the `version:` input to the same release tag to
-avoid drift.
+avoid drift. (The example above always shows the latest release:
+release-please bumps the lines marked `x-release-please-version` on
+every release, and you can drop that comment from your own workflow.)
 
 ## Contributing
 

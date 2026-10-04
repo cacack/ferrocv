@@ -825,7 +825,7 @@ fn render_with_missing_local_path_exits_two() {
 }
 
 /// A directory passed as `--theme` fails fast with a clear error
-/// pointing at the follow-up issue. No output file written.
+/// saying local themes are single `.typ` files. No output file written.
 #[test]
 fn render_with_directory_local_path_exits_two() {
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -851,7 +851,7 @@ fn render_with_directory_local_path_exits_two() {
         .assert()
         .code(2)
         .stderr(predicate::str::contains(".typ"))
-        .stderr(predicate::str::contains("#41"));
+        .stderr(predicate::str::contains("local themes are single files"));
 
     assert!(
         !out.exists(),
