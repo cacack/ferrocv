@@ -130,6 +130,25 @@ jobs:
       - if: steps.detect.outputs.has_cargo == 'true'
         run: make verify-no-network-default
 
+  # Builds the crate from its packaged tarball, as `cargo publish` does in
+  # release.yml, so a file missing from Cargo.toml's `include` list fails
+  # the PR instead of the crates.io publish (#259).
+  package:
+    name: cargo package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: detect
+        run: echo "has_cargo=$([ -f Cargo.toml ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.detect.outputs.has_cargo == 'true'
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # stable
+        with:
+          toolchain: stable
+      - if: steps.detect.outputs.has_cargo == 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - if: steps.detect.outputs.has_cargo == 'true'
+        run: make package
+
   coverage:
     name: coverage
     runs-on: ubuntu-latest
@@ -171,7 +190,7 @@ jobs:
     name: CI Success
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [fmt, clippy, test, deny, audit, typos, verify-no-network-default, coverage]
+    needs: [fmt, clippy, test, deny, audit, typos, verify-no-network-default, package, coverage]
     if: always()
     steps:
       - name: Check all jobs passed

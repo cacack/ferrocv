@@ -1,5 +1,5 @@
 .PHONY: help \
-        preflight fmt-check fmt clippy test deny audit typos coverage \
+        preflight fmt-check fmt clippy test deny audit typos package coverage \
         build build-release check clean doc install \
         install-tools verify-no-network-default \
         fuzz fuzz-parse fuzz-validate
@@ -13,7 +13,15 @@ help: ## Show available targets
 
 # --- CI parity ---------------------------------------------------------------
 
-preflight: fmt-check clippy test deny audit typos verify-no-network-default ## Run all CI checks locally
+preflight: fmt-check clippy test deny audit typos verify-no-network-default package ## Run all CI checks locally
+
+# Build the crate exactly as `cargo publish` would: only the files in
+# Cargo.toml's `include` list, compiled from the packaged tarball. A file
+# embedded via include_str!/include_bytes! but missing from `include`
+# fails here instead of at release time (#259). `--allow-dirty` lets it
+# run on an uncommitted local tree; CI's checkout is clean either way.
+package: ## cargo package with verification (CI parity)
+	cargo package --locked --allow-dirty
 
 # --- Architectural-boundary enforcement ---------------------------------------
 #
