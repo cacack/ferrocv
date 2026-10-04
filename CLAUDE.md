@@ -24,7 +24,9 @@ user-facing entrypoint.
 strings there are kept in lockstep with `.github/workflows/ci.yml`.
 
 - `make preflight` — full CI check suite (fmt-check, clippy, test,
-  deny, audit, typos). Run before pushing.
+  deny, audit, typos, verify-no-network-default, package). Run before
+  pushing. `package` builds the crate from its `cargo publish` tarball,
+  so a file missing from `Cargo.toml`'s `include` list fails it.
 - `make test` / `make clippy` / `make fmt` — individual targets.
 - `make install-tools` — first-time install of the non-stock tools
   (`cargo-deny`, `cargo-audit`, `typos-cli`, `cargo-llvm-cov`).
