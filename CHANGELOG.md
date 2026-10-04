@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/cacack/ferrocv/compare/v0.10.0...v0.10.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **release:** include assets/scaffold in the published crate ([38e660e](https://github.com/cacack/ferrocv/commit/38e660ed14004b842770ac0a201fec30a8dc7bf4)), closes [#259](https://github.com/cacack/ferrocv/issues/259)
+
 ## [0.10.0](https://github.com/cacack/ferrocv/compare/v0.9.1...v0.10.0) (2026-10-04)
 
 
