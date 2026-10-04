@@ -514,6 +514,57 @@ fn tailor_audience_selects_tagged_content() {
 }
 
 #[test]
+fn tailor_audience_stamps_display_label() {
+    // #247 / CONSTITUTION §7: an --audience cut stamps the audience name
+    // into `meta.x-audience` as a display-only label (the fixture has no
+    // `meta`, so it is created).
+    let assert = ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--audience")
+        .arg("security")
+        .assert()
+        .success();
+    let doc: Value =
+        serde_json::from_slice(&assert.get_output().stdout).expect("stdout is valid JSON");
+    assert_eq!(doc["meta"]["x-audience"], "security");
+}
+
+#[test]
+fn tailor_audience_keeps_master_set_display_label() {
+    // A label the master already sets wins over the stamp.
+    let mut input = master();
+    input["meta"] = serde_json::json!({ "x-audience": "Security Engineering" });
+    let assert = ferrocv()
+        .arg("tailor")
+        .arg("--audience")
+        .arg("security")
+        .write_stdin(input.to_string())
+        .assert()
+        .success();
+    let doc: Value =
+        serde_json::from_slice(&assert.get_output().stdout).expect("stdout is valid JSON");
+    assert_eq!(doc["meta"]["x-audience"], "Security Engineering");
+}
+
+#[test]
+fn tailor_without_audience_stamps_no_display_label() {
+    let assert = ferrocv()
+        .arg("tailor")
+        .arg(fixture("master_projection"))
+        .arg("--max-bullets")
+        .arg("1")
+        .assert()
+        .success();
+    let doc: Value =
+        serde_json::from_slice(&assert.get_output().stdout).expect("stdout is valid JSON");
+    assert!(
+        doc.get("meta").is_none(),
+        "mechanical-only cut adds no meta"
+    );
+}
+
+#[test]
 fn tailor_unknown_audience_is_usage_error_listing_known_audiences() {
     // #246: an --audience no tag uses (here a typo) would otherwise exit 0
     // with a plausible but un-tailored cut. It is a usage error instead:

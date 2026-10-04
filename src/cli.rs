@@ -275,7 +275,9 @@ struct ProjectionArgs {
     /// array entry (e.g. a `projects` or `work` entry) tagged under
     /// `x-ferrocv.audience` is dropped when it doesn't list the audience.
     /// Takes exactly one value. A name that no `x-ferrocv` tag in the document
-    /// uses is a usage error that lists the known audiences.
+    /// uses is a usage error that lists the known audiences. The name is
+    /// also stamped into `meta.x-audience` as a display-only label (e.g.
+    /// `classic`'s "Tailored for:" tagline) unless the master sets one.
     #[arg(long, value_name = "NAME")]
     audience: Option<String>,
     /// Drop `work` entries that ended before this ISO 8601 date

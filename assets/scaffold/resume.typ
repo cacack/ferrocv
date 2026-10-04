@@ -88,8 +88,9 @@
   }
 
   // Extension fields (§1): read author-defined `x-<namespace>` data with
-  // `ext`. Here we surface a `meta.x-audience` tag (set by a tailored
-  // cut) as a tagline. Delete if you don't use it.
+  // `ext`. Here we surface the `meta.x-audience` label (stamped by
+  // `--audience`, or set in the master) as a tagline. It is display-only:
+  // print it, never filter or branch on it. Delete if you don't use it.
   let audience = ext(opt(resume, "meta"), "audience")
   if audience != none and type(audience) == str and audience != "" {
     v(2pt)

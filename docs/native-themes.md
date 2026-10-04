@@ -132,7 +132,10 @@ comment — get these wrong and you silently read `none`:
 
 The bundled `classic` theme surfaces a `meta.x-audience` tagline as a
 small worked example; the scaffold ships the same snippet commented
-inline.
+inline. That label is stamped by `--audience` (or set in the master to
+override the text) and is **display-only**: print it, never filter or
+branch on it — selection happens in Rust before the theme runs
+(CONSTITUTION §7).
 
 ## Authoring workflow: `ferrocv themes new`
 
