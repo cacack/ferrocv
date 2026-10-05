@@ -8,6 +8,19 @@ Amendments require a PR that updates this file and explains the
 reasoning in the commit message. Everything else (style, structure,
 tooling choices) is open to iteration.
 
+## Audience
+
+- **Primary:** the author, maintaining one master `resume.json` and
+  producing tailored cuts from it (§7).
+- **Secondary:** technically comfortable job seekers who keep a JSON
+  Resume master and want offline, tailored PDF, HTML, and text cuts
+  from a single binary.
+
+When the two pull in different directions, the primary audience's
+real workflow decides; the secondary audience is served by keeping
+that workflow general, documented, and free of author-specific
+assumptions.
+
 ## Core principles
 
 ### 1. JSON Resume is the canonical input
@@ -61,12 +74,18 @@ themes; native themes do not depend on adapter internals.
 - **Why:** adapters give us visual variety on day one; native themes
   give us a durable, JSON-Resume-shaped contract long-term. Conflating
   them produces a leaky abstraction that serves neither well.
+- **External native-theme authoring is a supported surface.** Users
+  may write their own native themes against the shared prelude
+  contract (`themes new` scaffolds one; `render --theme <path>`
+  renders it). This is the native-theme layer above, opened to its
+  users — not a separate extension point — and it runs under the same
+  Typst sandbox (§6).
 
 ### 5. Simple now; iterate later
 
-Phase 1 is built for Phase 1. We do not pre-engineer extension points,
-plugin systems, or configuration surfaces for phases we have not
-started.
+Build for the problem in front of us. We do not pre-engineer
+extension points, plugin systems, or configuration surfaces for needs
+we do not yet have.
 
 - **Why:** this is a personal tool graduating to open-source; the
   cost of YAGNI here is low and the cost of premature abstraction is
@@ -74,6 +93,10 @@ started.
 - **In practice:** when in doubt, pick the narrower, more specific
   solution. A second caller is the trigger to generalize, not the
   first.
+- **Not premature extension:** external native-theme authoring (§4)
+  already has its callers — the bundled native themes and the users
+  who scaffold their own — so supporting it is not a speculative
+  extension point.
 
 ### 6. Trust is a feature, not a footnote
 
@@ -133,9 +156,9 @@ them requires a constitutional amendment, not a feature PR.
   Typst doesn't grant a capability, neither do we.
 - **Reproducible, verifiable releases.** Tagged releases are built
   from tagged source in CI; release artifacts are checksummed, and
-  (when tooling allows) signed. *Aspirational for Phase 0+:* state
-  it now so it's on the record and gets wired up as soon as there's
-  something to release.
+  (when tooling allows) signed. *Signing is still aspirational:* it is
+  stated now so it's on the record and gets wired up as soon as
+  tooling allows.
 
 **Why:** the pitch is "single static binary, no Node, no TeX." That
 pitch is also the security story — fewer moving parts, less
@@ -198,6 +221,24 @@ amendment PR, not a feature PR.
 - Authoring or rewriting resume content. Projection (§7) selects and
   omits from a master the user wrote; it does not generate, summarize,
   or reword bullets, and it does not auto-fit content to a page count.
+
+## Success Criteria
+
+How we know `ferrocv` is doing its job. Each criterion names the check
+that scores it; a *judgement call* is scored by a person reading the
+named source, not by a command.
+
+1. **One master, every cut.** The author's `resume` repo produces every
+   cut from its single master `resume.json` using `ferrocv` flags
+   alone, with no out-of-tree preprocessing scripts.
+   *Check:* judgement call, reviewed against that repo.
+2. **A mistyped audience fails loudly.** An `--audience` that matches
+   no tag exits non-zero and writes nothing.
+   *Check:* `cargo test --test tailor_cli
+   tailor_unknown_audience_is_usage_error_listing_known_audiences`.
+3. **The pitch leads with projection.** The README's first paragraph
+   describes targeted projection (§7), not only rendering.
+   *Check:* judgement call — read the README's opening paragraph.
 
 ## Testing doctrine
 
