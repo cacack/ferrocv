@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/cacack/ferrocv/compare/v0.10.1...v0.11.0) (2026-10-05)
+
+
+### Features
+
+* **projection:** stamp meta.x-audience on --audience cuts ([c2359f3](https://github.com/cacack/ferrocv/commit/c2359f36ef53018323320a865ad78eb1482dcadc)), closes [#247](https://github.com/cacack/ferrocv/issues/247)
+
 ## [0.10.1](https://github.com/cacack/ferrocv/compare/v0.10.0...v0.10.1) (2026-10-04)
 
 

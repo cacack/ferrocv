@@ -1,6 +1,6 @@
 [package]
 name = "ferrocv"
-version = "0.10.1"
+version = "0.11.0"
 edition = "2024"
 rust-version = "1.92"
 description = "Maintain one master JSON Resume and emit tailored, audience-specific cuts, rendered to PDF, HTML, and plain text via embedded Typst."
