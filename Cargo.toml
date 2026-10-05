@@ -3,11 +3,11 @@ name = "ferrocv"
 version = "0.10.1"
 edition = "2024"
 rust-version = "1.92"
-description = "Render JSON Resume documents to PDF, HTML, and plain text via embedded Typst."
+description = "Maintain one master JSON Resume and emit tailored, audience-specific cuts, rendered to PDF, HTML, and plain text via embedded Typst."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/cacack/ferrocv"
 readme = "README.md"
-keywords = ["resume", "cv", "json-resume", "typst", "pdf"]
+keywords = ["resume", "cv", "json-resume", "typst", "tailoring"]
 categories = ["command-line-utilities"]
 include = [
     "src/**/*",
