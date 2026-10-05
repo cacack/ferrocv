@@ -271,8 +271,10 @@ enum Format {
 struct ProjectionArgs {
     /// Keep only content tagged for this audience under `x-ferrocv`
     /// (curated selection). Untagged content is kept for every audience;
-    /// tagged content is kept only for the audiences it lists. Takes
-    /// exactly one value. A name that no `x-ferrocv` tag in the document
+    /// tagged content is kept only for the audiences it lists. A whole
+    /// array entry (e.g. a `projects` or `work` entry) tagged under
+    /// `x-ferrocv.audience` is dropped when it doesn't list the audience.
+    /// Takes exactly one value. A name that no `x-ferrocv` tag in the document
     /// uses is a usage error that lists the known audiences.
     #[arg(long, value_name = "NAME")]
     audience: Option<String>,
