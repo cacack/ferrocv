@@ -312,9 +312,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cacack/ferrocv/.github/actions/setup-ferrocv@v0.10.1 # x-release-please-version
+      - uses: cacack/ferrocv/.github/actions/setup-ferrocv@v0.11.0 # x-release-please-version
         with:
-          version: v0.10.1 # x-release-please-version
+          version: v0.11.0 # x-release-please-version
       - run: ferrocv validate resume.json
       - run: ferrocv render resume.json --theme typst-jsonresume-cv --output dist/resume.pdf
       - uses: actions/upload-artifact@v4
