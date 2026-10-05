@@ -25,8 +25,11 @@ cover the latest minor line.
 ## Scope
 
 `ferrocv` reads `resume.json`, renders via embedded Typst, and writes
-files the user specified. It makes no network calls at runtime — see
-[`CONSTITUTION.md`](CONSTITUTION.md) §6 for the full trust model.
+files the user specified. `render` and `validate` make no network
+calls. The single exception is `themes install`, which exists only in
+builds with the `install` Cargo feature and fetches from the Typst
+Universe registry over HTTPS. See [`CONSTITUTION.md`](CONSTITUTION.md)
+§6 for the full trust model.
 
 In scope:
 
@@ -35,7 +38,7 @@ In scope:
 - Vendored theme templates under `assets/themes/` mishandling user data
   or escaping Typst's sandbox.
 - Dependency vulnerabilities flagged by `cargo-audit` or `cargo-deny`.
-- Release-pipeline integrity (workflow tampering, unsigned artifacts).
+- Release-pipeline integrity (workflow tampering, tampered artifacts).
 
 Out of scope:
 
@@ -45,3 +48,13 @@ Out of scope:
   account.
 - Issues in third-party tools that happen to consume `ferrocv`'s
   output (PDF viewers, browsers, ATS systems).
+
+## Release integrity
+
+Release binaries are built from tagged source in CI and published with
+SHA256 checksum files (`ferrocv-<target>.sha256`). They are **not**
+signed or attested, so a checksum confirms an intact download, not who
+built it. `themes install` relies on TLS alone for integrity: the Typst
+Universe registry publishes no checksums or signatures to verify
+against. If you need stronger guarantees, vendor themes under
+`assets/themes/` and build from source.
