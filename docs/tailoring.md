@@ -206,6 +206,21 @@ derived document. Your master keeps its tags untouched; only the cut is
 cleaned. (This is enforced: the derived document carries no `x-ferrocv`
 anywhere.)
 
+## Display label
+
+An `--audience` cut also stamps the audience name into
+`meta.x-audience`, so a theme can say who the cut is for — `classic`
+prints "Tailored for: security" under the header. Want friendlier text?
+Set it in the master and it wins over the stamp:
+
+```json
+"meta": { "x-audience": "Security Engineering" }
+```
+
+The label is **display-only**: themes print it but never filter or
+branch on it — selection already happened in Rust (CONSTITUTION §7).
+Mechanical-only cuts (no `--audience`) stamp nothing.
+
 ## Cautions
 
 - **`x-ferrocv.highlights` is positional — re-check it after reordering.**

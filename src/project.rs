@@ -14,7 +14,9 @@
 //!   carry the requested audience under `x-ferrocv.audience`, and within
 //!   surviving elements keep the highlights whose index-parallel
 //!   `x-ferrocv.highlights` tag matches. The consumed `x-ferrocv` keys
-//!   are stripped from the derived document.
+//!   are stripped from the derived document, and the audience name is
+//!   stamped into `meta.x-audience` as a display-only label unless the
+//!   master already sets one (§7).
 //! - [`ProjectionSpec::since`] — drop `work` entries that ended before a
 //!   cutoff date; ongoing entries (no `endDate`) are always kept.
 //! - [`ProjectionSpec::collapse_before`] — keep `work` entries that ended
@@ -108,7 +110,11 @@ pub struct ProjectionSpec {
     /// without it. Within surviving elements, highlights are filtered the
     /// same way against the index-parallel `x-ferrocv.highlights`. The
     /// consumed `x-ferrocv` keys are stripped from the derived document.
-    /// `None` runs no curated selection (every element is universal).
+    /// The audience name is stamped into `meta.x-audience` as an opaque,
+    /// display-only label (themes may print it, never select on it — §7)
+    /// unless the master already sets a non-empty string there.
+    /// `None` runs no curated selection (every element is universal) and
+    /// stamps nothing.
     pub audience: Option<String>,
     /// Drop `work` entries that ended before this ISO 8601 date (`YYYY`,
     /// `YYYY-MM`, or `YYYY-MM-DD`). Comparison is granularity-aware: an
@@ -352,6 +358,9 @@ pub fn project(doc: &Value, spec: &ProjectionSpec) -> Result<Value, ProjectionEr
 /// `--redact`'s job, not audience selection — ADR 0004); only its
 /// `x-ferrocv` control metadata, if any, is stripped.
 ///
+/// Last, the audience name is stamped as a display label (see
+/// [`stamp_audience_label`]).
+///
 /// Returns [`ProjectionError::UnknownAudience`] if `audience` appears in
 /// no tag anywhere in the document (#246), or
 /// [`ProjectionError::HighlightsTagMismatch`] if an entry's
@@ -398,7 +407,31 @@ fn apply_audience(out: &mut Value, audience: &str) -> Result<(), ProjectionError
         *entries = kept;
     }
 
+    stamp_audience_label(root, audience);
     Ok(())
+}
+
+/// Stamp `audience` into `meta.x-audience` as an opaque display label
+/// (`CONSTITUTION.md` §7): themes may print it, never select on it.
+///
+/// A non-empty string the master already set there wins — that is how a
+/// user shows a friendlier label than the internal tag. `meta` is created
+/// when absent; a non-object `meta` is left alone (invalid input is
+/// schema validation's concern, not projection's).
+fn stamp_audience_label(root: &mut serde_json::Map<String, Value>, audience: &str) {
+    let meta = root
+        .entry("meta")
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    let Some(meta) = meta.as_object_mut() else {
+        return;
+    };
+    let preset = meta
+        .get("x-audience")
+        .and_then(Value::as_str)
+        .is_some_and(|label| !label.is_empty());
+    if !preset {
+        meta.insert("x-audience".to_owned(), Value::String(audience.to_owned()));
+    }
 }
 
 /// Every audience name tagged anywhere in `doc`: entry-level
@@ -1123,6 +1156,68 @@ mod tests {
         assert!(
             out["basics"].get("x-ferrocv").is_none(),
             "x-ferrocv stripped from basics"
+        );
+    }
+
+    #[test]
+    fn audience_stamps_display_label_into_existing_meta() {
+        let mut master = audience_master();
+        master["meta"] = json!({ "version": "v1" });
+        let spec = ProjectionSpec {
+            audience: Some("security".into()),
+            ..Default::default()
+        };
+        let out = project(&master, &spec).unwrap();
+        assert_eq!(out["meta"]["x-audience"], "security");
+        assert_eq!(out["meta"]["version"], "v1", "other meta fields kept");
+    }
+
+    #[test]
+    fn audience_creates_meta_when_absent() {
+        let master = audience_master();
+        assert!(master.get("meta").is_none(), "fixture has no meta");
+        let spec = ProjectionSpec {
+            audience: Some("security".into()),
+            ..Default::default()
+        };
+        let out = project(&master, &spec).unwrap();
+        assert_eq!(out["meta"], json!({ "x-audience": "security" }));
+    }
+
+    #[test]
+    fn audience_preserves_master_set_display_label() {
+        let mut master = audience_master();
+        master["meta"] = json!({ "x-audience": "Security Engineering" });
+        let spec = ProjectionSpec {
+            audience: Some("security".into()),
+            ..Default::default()
+        };
+        let out = project(&master, &spec).unwrap();
+        assert_eq!(out["meta"]["x-audience"], "Security Engineering");
+    }
+
+    #[test]
+    fn audience_overwrites_empty_master_display_label() {
+        let mut master = audience_master();
+        master["meta"] = json!({ "x-audience": "" });
+        let spec = ProjectionSpec {
+            audience: Some("security".into()),
+            ..Default::default()
+        };
+        let out = project(&master, &spec).unwrap();
+        assert_eq!(out["meta"]["x-audience"], "security");
+    }
+
+    #[test]
+    fn no_audience_stamps_no_display_label() {
+        let spec = ProjectionSpec {
+            max_bullets: Some(1),
+            ..Default::default()
+        };
+        let out = project(&audience_master(), &spec).unwrap();
+        assert!(
+            out.get("meta").is_none(),
+            "mechanical-only cut adds no meta"
         );
     }
 

@@ -66,12 +66,6 @@ ferrocv render resume.json --theme text-minimal --output resume.pdf
 # Or use an adapter that wraps an upstream Typst Universe template
 ferrocv render resume.json --theme typst-jsonresume-cv --output resume.pdf
 
-# `classic` shows a "Tailored for: <label>" tagline when the resume's
-# `meta` object carries an `x-audience` string, e.g.
-#   { "meta": { "x-audience": "security" }, ... }
-# (the tag lives under `meta`, not the document root, because JSON Resume
-# permits `x-` extension fields inside objects but not at the top level)
-
 # Render to plain text (defaults to `text-minimal`)
 ferrocv render resume.json --format text
 
@@ -143,7 +137,12 @@ first N by position):
   `[]` tag) is universal** — kept in every cut — so you can adopt tags
   incrementally; only content tagged for *other* audiences is dropped.
   The consumed `x-ferrocv` metadata is stripped from the derived
-  document. (Schema and rationale: ADR 0004.)
+  document, and the audience name is stamped into `meta.x-audience` as
+  a display label — `classic` prints it as a "Tailored for: security"
+  tagline. To show friendlier text, set `meta.x-audience` in the master
+  (e.g. `"Security Engineering"`); a master-set label wins. The label is
+  display-only: themes print it, never select on it. (Schema and
+  rationale: ADR 0004.)
 
 The **mechanical** filters (theme-agnostic):
 

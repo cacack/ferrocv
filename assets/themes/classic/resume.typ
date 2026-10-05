@@ -20,9 +20,11 @@
 //   (the prelude is data access only — §4).
 //
 // Audience-aware rendering (demonstrates the `ext` accessor, #180): if
-// the document's `meta` object carries an `x-audience` string — e.g. a
-// tailored cut stamped "security" — it is surfaced as a "Tailored for:
-// <label>" tagline under the header. The tag lives under `meta` (not the
+// the document's `meta` object carries an `x-audience` string — stamped
+// by `--audience security`, or set in the master to override the text —
+// it is surfaced as a "Tailored for: <label>" tagline under the header.
+// The label is display-only: never filter or branch on it; selection
+// happens in Rust before the theme runs (CONSTITUTION §7). The tag lives under `meta` (not the
 // document root) because JSON Resume's schema forbids unknown properties
 // at the root but permits `x-` extensions inside objects like `meta`.
 // Absent `meta.x-audience` ⇒ no tagline.

@@ -1125,6 +1125,32 @@ fn render_with_audience_flag_selects_tagged_content() {
 }
 
 #[test]
+fn render_audience_prints_stamped_label_in_classic() {
+    // #247: `render --audience` stamps `meta.x-audience`, which `classic`
+    // prints as its "Tailored for:" tagline — one audience mechanism.
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.txt");
+    ferrocv()
+        .arg("render")
+        .arg(fixture("master_projection"))
+        .arg("--audience")
+        .arg("security")
+        .arg("--theme")
+        .arg("classic")
+        .arg("--format")
+        .arg("text")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success();
+    let text = std::fs::read_to_string(&out).expect("read output");
+    assert!(
+        text.contains("Tailored for: security"),
+        "stamped label must render as classic's tagline; got:\n{text}"
+    );
+}
+
+#[test]
 fn render_unknown_audience_is_usage_error_with_no_output() {
     // #246: same guard as `tailor` — render shares `project()` (ADR 0005).
     let tmp = tempfile::tempdir().expect("tempdir");

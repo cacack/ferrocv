@@ -166,6 +166,13 @@ audience-specific cuts** from it: a focused two-page document that is a
   preprocesses the document; themes receive an already-narrowed valid
   JSON Resume and stay ignorant of audiences and filters. This keeps
   the theme contract simple (§5) and the layers separable (§4).
+- **Projection may stamp a display label, nothing more.** A curated cut
+  may write the requested audience name into `meta.x-audience` as an
+  opaque *display label*. Themes may print it (e.g. "Tailored for:
+  security") but must never filter, branch, or select content on it —
+  selection stays in Rust. A master that already sets
+  `meta.x-audience` wins, which is how a user shows a friendlier label
+  than the internal tag.
 - **Projection selects and omits; it never rewrites or generates.** We
   do not reword bullets, summarize, or invent content — that would make
   this an authoring tool and require the LLM calls §6 rules out. The

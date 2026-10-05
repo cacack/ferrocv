@@ -427,7 +427,8 @@ const CLASSIC_RESUME_PATH: &str = "/themes/classic/resume.typ";
 /// accessor (#180): a `meta.x-audience` string renders as a
 /// "Tailored for: <label>" tagline (the tag lives under `meta` because the
 /// JSON Resume schema permits `x-` extensions inside objects but not at the
-/// document root).
+/// document root). `--audience` stamps that label; it is display-only —
+/// the theme prints it and never selects content on it (§7).
 ///
 /// `classic` is the default PDF theme as of issue #188 (text still defaults
 /// to `text-minimal`, HTML to `html-minimal`); the default mapping lives in
