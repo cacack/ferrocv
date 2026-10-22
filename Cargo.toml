@@ -95,7 +95,7 @@ toml = { version = "1", optional = true }
 # Platform-specific user cache directory (XDG on Linux, Caches on
 # macOS, LocalAppData on Windows). Overridable via `FERROCV_CACHE_DIR`
 # for tests and power users.
-dirs = { version = "6", optional = true }
+dirs = { version = "7", optional = true }
 # Atomic "extract to sibling temp dir then rename" safety for
 # concurrent `theme install` invocations. Already present as a
 # dev-dep below, but the install pipeline uses it at runtime too; the
