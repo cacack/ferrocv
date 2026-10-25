@@ -12,11 +12,12 @@ on: pull_request_target
 #
 # The two secrets are mapped by name rather than passed with `secrets:
 # inherit`, which would hand this workflow every secret the repo holds to
-# satisfy a contract that declares exactly two. They belong to the
-# ferrocv-steward App, whose token is what GITHUB_TOKEN could not be: it can
-# hold the `workflow` permission GitHub demands before enabling auto-merge on a
-# PR touching .github/workflows/*, and its push triggers CI on the resulting
-# merge commit.
+# satisfy a contract that declares exactly two. They belong to the shared
+# Dependabot App, stored in this repo's `dependabot` environment (see
+# cacack/workflows, "The Dependabot App"). Its token is what GITHUB_TOKEN could
+# not be: it can hold the `workflow` permission GitHub demands before enabling
+# auto-merge on a PR touching .github/workflows/*, and its push triggers CI on
+# the resulting merge commit.
 #
 # Scoped to github_actions — cargo updates still merge by hand (see #230).
 #
@@ -29,7 +30,7 @@ permissions:
 
 jobs:
   automerge:
-    uses: cacack/workflows/.github/workflows/dependabot-automerge.yml@9c4e052cf489c8721c0570d64c6bf307ceb82036 # v2.3.0
+    uses: cacack/workflows/.github/workflows/dependabot-automerge.yml@8c32eefebab14d35b588034d5bca5178d781acf6 # v2.4.0
     with:
       ecosystems: github_actions
     secrets:
