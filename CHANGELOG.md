@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.12.0](https://github.com/cacack/ferrocv/compare/v0.11.0...v0.12.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **classic:** the default PDF theme (classic) now paginates differently. Entries no longer move whole to the next page; a short entry may split between highlights, with its title kept beside the first line of body.
+* **themes:** the fantastic-cv, modern-cv, and basic-resume adapters render differently: new contact entries, "Present" for ongoing roles, a GPA bullet, and no empty separators or labels.
+* **render:** default `--format text` output (text-minimal) no longer has a blank line between every line; blank lines now appear only between sections and entries.
+* `render` now exits 2 for a bundled theme in a format it does not support (e.g. `--theme classic --format html`, any adapter in HTML, `html-minimal` in PDF or text), and for PDF or text output with no text. Library: `Theme` gains a required `formats` field, and `compile_pdf`/`compile_theme`/`compile_text` return an error for a document with no text.
+* `compile_theme_resolved`, `compile_text_resolved`, and `compile_html_resolved` now return `Rendered<T>` (`output` plus
+
+### Bug Fixes
+
+* address review findings for text line grouping ([354e32c](https://github.com/cacack/ferrocv/commit/354e32c7630daa0df25419e82cc461ea382849c3))
+* **classic:** let entries taller than a page flow instead of clipping ([efe7ea6](https://github.com/cacack/ferrocv/commit/efe7ea6434175b18a8936898d7d3153cfe99585d))
+* reject theme/format pairs that would render incomplete output ([8121052](https://github.com/cacack/ferrocv/commit/812105248eae6bf8f1dcfd90e4d053411804ada5)), closes [#289](https://github.com/cacack/ferrocv/issues/289)
+* render schema-valid documents with sparse entries in every adapter ([0fc7854](https://github.com/cacack/ferrocv/commit/0fc7854f30f874307931dee937a9d61881576460)), closes [#291](https://github.com/cacack/ferrocv/issues/291)
+* **render:** group text extraction into real lines in reading order ([9627091](https://github.com/cacack/ferrocv/commit/9627091896b578028d1d751c342680f46d9641ce)), closes [#292](https://github.com/cacack/ferrocv/issues/292)
+* surface Typst warnings on stderr instead of discarding them ([c93969f](https://github.com/cacack/ferrocv/commit/c93969f6b356ce45bbf278025cbc710a16c103dc))
+* **themes:** link adapter URLs to their source and map dropped fields ([ae11a32](https://github.com/cacack/ferrocv/commit/ae11a32ee4904881e7ffea7f9bb2f7571d3bf5a3))
+
 ## [0.11.0](https://github.com/cacack/ferrocv/compare/v0.10.1...v0.11.0) (2026-10-05)
 
 
