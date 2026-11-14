@@ -153,7 +153,11 @@
   let contact-item(value, prefix: "", link-type: "") = {
     if value != "" {
       if link-type != "" {
-        link(link-type + value)[#(prefix + value)]
+        // ferrocv vendor patch (link targets): upstream always prepended
+        // `link-type`, so a full URL became `https://https://...`. Keep
+        // a value that already carries a scheme as-is. See VENDORING.md.
+        let target = if value.contains("://") { value } else { link-type + value }
+        link(target)[#(prefix + value)]
       } else {
         value
       }

@@ -4,6 +4,12 @@
 // orcid-icon call site below has been rewritten to a plain "ORCID:"
 // label prefix; see VENDORING.md → Patches applied.
 
+// ferrocv patch (link targets): upstream hard-coded an `https://` prefix
+// on every URL link, rewriting an `http://` URL to `https://`. Prepend
+// the scheme only when the value does not already carry one. See
+// VENDORING.md → Patches applied.
+#let __href(scheme, value) = if value.contains("://") { value } else { scheme + value }
+
 #let resume(
   author: "",
   author-position: left,
@@ -80,7 +86,7 @@
   let contact-item(value, prefix: "", link-type: "") = {
     if value != "" {
       if link-type != "" {
-        link(link-type + value)[#(prefix + value)]
+        link(__href(link-type, value))[#(prefix + value)]
       } else {
         value
       }
@@ -199,14 +205,14 @@
   generic-one-by-two(
     left: {
       if role == "" {
-        [*#name* #if url != "" and dates != "" [ (#link("https://" + url)[#url])]]
+        [*#name* #if url != "" and dates != "" [ (#link(__href("https://", url))[#url])]]
       } else {
-        [*#role*, #name #if url != "" and dates != ""  [ (#link("https://" + url)[#url])]]
+        [*#role*, #name #if url != "" and dates != ""  [ (#link(__href("https://", url))[#url])]]
       }
     },
     right: {
       if dates == "" and url != "" {
-        link("https://" + url)[#url]
+        link(__href("https://", url))[#url]
       } else {
         dates
       }
@@ -223,7 +229,7 @@
   [
     *#name*, #issuer
     #if url != "" {
-      [ (#link("https://" + url)[#url])]
+      [ (#link(__href("https://", url))[#url])]
     }
     #h(1fr) #date
   ]

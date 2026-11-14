@@ -51,15 +51,28 @@
 // `author.positions` expects an array. Wrap in a singleton list when set.
 #let label = basics.at("label", default: "")
 
+// ferrocv glue: modern-cv renders a contact only when its key is in the
+// `author` dict, so absent contacts are left out rather than set to "".
+// `basics.url` → `homepage` (linked as-is). Profiles → `custom` entries
+// linked to their own `url`: modern-cv's `github`/`linkedin` keys
+// rebuild the URL from a hard-coded host, which would not be the
+// source URL. Icons are stubbed out (VENDORING.md, Patch A), so each
+// entry is labelled `<network>: <username>`, like `classic`.
+#let __opt(key, value) = if value != "" { ((key): value) } else { (:) }
+#let profiles = basics.at("profiles", default: ()).map(p => {
+  let network = p.at("network", default: "")
+  let username = p.at("username", default: "")
+  let url = p.at("url", default: "")
+  let text = (network, username).filter(x => x != "").join(": ", default: url)
+  if text == "" { none } else { (text: text) + __opt("link", url) }
+}).filter(x => x != none)
+
 #let author_dict = (
   firstname: firstname,
   lastname: lastname,
   positions: if label != "" { (label,) } else { () },
   address: address,
-  phone: basics.at("phone", default: ""),
-  email: basics.at("email", default: ""),
-  personal-site: basics.at("url", default: ""),
-)
+) + __opt("phone", basics.at("phone", default: "")) + __opt("email", basics.at("email", default: "")) + __opt("homepage", basics.at("url", default: "")) + if profiles.len() > 0 { (custom: profiles) } else { (:) }
 
 // Apply modern-cv's `resume(...)` show rule.
 //

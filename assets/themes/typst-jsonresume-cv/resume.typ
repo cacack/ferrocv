@@ -76,6 +76,10 @@
   },
 
   phone: phoneNumber,
+  // ferrocv vendor patch (bundled font): upstream defaults to
+  // "Garamond", which is not bundled, so Typst silently fell back to
+  // Libertinus Serif. Name the bundled font explicitly. See VENDORING.md.
+  font: "Libertinus Serif",
 
   ..if website != none {
     ( personal-site: website )
