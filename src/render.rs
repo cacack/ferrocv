@@ -112,7 +112,7 @@ use std::sync::OnceLock;
 use serde_json::Value;
 use typst::diag::{FileError, FileResult, PackageError, Warned};
 use typst::foundations::{Bytes, Datetime};
-use typst::layout::{Frame, FrameItem};
+use typst::layout::{Dir, Frame, FrameItem};
 use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
@@ -327,18 +327,20 @@ pub fn compile_theme(theme: &Theme, data: &Value) -> Result<Vec<u8>, RenderError
 ///
 /// # Heuristics
 ///
-/// Two pragmatic constants govern grouping:
+/// Three font-size-relative constants govern grouping:
 ///
-/// - `LINE_TOLERANCE_PT` — items whose absolute y differs by less
-///   than this (in points) belong to the same visual line.
-/// - `PARAGRAPH_GAP_PT` — vertical gaps larger than this between
+/// - `LINE_TOLERANCE_EM` — runs whose baselines differ by less than
+///   this belong to the same visual line, which is then read left to
+///   right (right to left for an RTL language).
+/// - `PARAGRAPH_GAP_EM` — baseline gaps larger than this between
 ///   adjacent lines insert a blank line (paragraph break) into the
-///   output.
+///   output; wrapped and `linebreak()` lines stay contiguous.
+/// - `WORD_GAP_EM` — horizontal gaps larger than this between runs
+///   on one line become a single space.
 ///
-/// Both are Phase-2 starting points, tunable as theme golden tests
-/// land in subsequent prompts. Per CONSTITUTION §5, we deliberately
-/// avoid adaptive line-height detection or per-theme configuration
-/// until a real caller demonstrates the need.
+/// Per CONSTITUTION §5, we deliberately avoid adaptive line-height
+/// detection or per-theme configuration until a real caller
+/// demonstrates the need.
 ///
 /// # Errors
 ///
@@ -507,47 +509,74 @@ fn render_world_to_html(world: &FerrocvWorld) -> Result<Rendered<String>, Render
     })
 }
 
-/// Maximum vertical distance (in PostScript points) between two text
-/// items for them to be considered part of the same visual line.
+/// Maximum baseline difference between two text runs, as a fraction
+/// of the smaller run's font size, for them to share a visual line.
 ///
-/// Tuned empirically: Typst y-coordinates for items on the same line
-/// are typically identical, but rounding through the layout engine
-/// can introduce sub-point jitter. 1pt is generous enough to absorb
-/// jitter without merging genuinely separate lines (most theme
-/// line-spacing is at least 8pt).
-const LINE_TOLERANCE_PT: f64 = 1.0;
+/// Runs on one row rarely share an exact y: a smaller right-aligned
+/// date beside a title, or a keyword list beside a heading, sits a
+/// fraction of a point off (`classic` measures ~0.65pt at 10.5pt vs
+/// 9.5pt). 0.3em absorbs that while staying far below any line pitch
+/// (≥ 1.2em in every shipped theme).
+const LINE_TOLERANCE_EM: f64 = 0.3;
 
-/// Minimum vertical gap (in PostScript points) between two
-/// consecutive lines that triggers a paragraph break (blank line) in
-/// the output.
+/// Minimum baseline-to-baseline distance between consecutive lines,
+/// as a fraction of the lower line's font size, that inserts a blank
+/// line (paragraph break) into the output.
 ///
-/// Roughly 1.5× a typical 10pt body line height — chosen to insert a
-/// blank line between section blocks while keeping tight in-paragraph
-/// line wraps glued together. Tunable as theme goldens land.
-const PARAGRAPH_GAP_PT: f64 = 8.0;
+/// The lower line's size is the reference because its ascent is what
+/// a baseline gap mostly measures; a large name above a body-size
+/// line would otherwise mask the paragraph break beneath it.
+/// Measured across the shipped themes: wrapped and
+/// `linebreak()`-separated lines sit 1.2–1.45em apart, while the
+/// spacing between entries and sections puts them 1.58em (`classic`)
+/// or more apart. 1.5em splits the two.
+const PARAGRAPH_GAP_EM: f64 = 1.5;
+
+/// Minimum horizontal gap between two runs on one line, as a fraction
+/// of the smaller run's font size, that is rendered as a space.
+///
+/// Adjacent runs that touch (a bold label followed by `: details`)
+/// join directly; runs separated by visible whitespace (a bullet
+/// marker and its text, columns of a row) get one space.
+const WORD_GAP_EM: f64 = 0.15;
 
 /// One text run's position in the compiled document, flattened into
 /// a comparable scalar form.
 ///
-/// `y_pt` and `x_pt` are absolute coordinates in points within the
-/// containing page (Typst's origin is top-left, so larger y is lower
-/// on the page). The page index is implicit in the outer container —
-/// per-page items live in their own `Vec` so cross-page y deltas
-/// never get conflated with intra-page paragraph gaps.
+/// `y_pt` (baseline) and `x_pt` (run start) are absolute coordinates
+/// in points within the containing page (Typst's origin is top-left,
+/// so larger y is lower on the page). The page index is implicit in
+/// the outer container — per-page items live in their own `Vec` so
+/// cross-page y deltas never get conflated with intra-page paragraph
+/// gaps.
 struct TextItemPosition {
     y_pt: f64,
     x_pt: f64,
+    width_pt: f64,
+    size_pt: f64,
+    /// The run's language reads right to left (`Lang::dir`). Typst
+    /// lays an RTL line's runs out right to left, so reading order is
+    /// descending x.
+    rtl: bool,
+    text: String,
+}
+
+/// One visual line: its first run's baseline, its largest font size,
+/// and its runs joined in reading order.
+struct Line {
+    y_pt: f64,
+    size_pt: f64,
     text: String,
 }
 
 /// Extract a plain-text rendering from a compiled [`PagedDocument`].
 ///
 /// Walks every page's frame tree, collects each [`FrameItem::Text`]
-/// run with its absolute coordinates, sorts by reading order
-/// `(page, y, x)`, groups items into visual lines using
-/// [`LINE_TOLERANCE_PT`], and joins them with paragraph breaks
-/// inserted whenever the vertical gap exceeds [`PARAGRAPH_GAP_PT`].
-/// Pages are separated by a blank line.
+/// run with its absolute coordinates, groups runs into visual lines
+/// by baseline ([`LINE_TOLERANCE_EM`]), orders each line's runs in
+/// reading direction, and joins lines with paragraph breaks inserted
+/// whenever the vertical gap exceeds [`PARAGRAPH_GAP_EM`]. Pages are
+/// separated by a blank line.
 ///
 /// The output is normalized so each line has no trailing whitespace,
 /// runs of blank lines collapse to a single blank, leading/trailing
@@ -556,29 +585,14 @@ fn extract_text(document: &PagedDocument) -> String {
     // Gather per-page items so we can preserve a blank line between
     // pages without conflating cross-page y deltas with paragraph
     // gaps.
-    let mut pages: Vec<Vec<TextItemPosition>> = Vec::with_capacity(document.pages().len());
+    let mut page_strings: Vec<String> = Vec::with_capacity(document.pages().len());
     for page in document.pages() {
-        let mut page_items: Vec<TextItemPosition> = Vec::new();
-        collect_from_frame(&page.frame, 0.0, 0.0, &mut page_items);
-        pages.push(page_items);
-    }
-
-    let mut page_strings: Vec<String> = Vec::with_capacity(pages.len());
-    for mut items in pages {
-        // Sort within page by reading order. Cross-page ordering is
-        // implicit in the outer Vec.
-        items.sort_by(|a, b| {
-            a.y_pt
-                .partial_cmp(&b.y_pt)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| {
-                    a.x_pt
-                        .partial_cmp(&b.x_pt)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-        });
-
-        let lines = group_into_lines(&items);
+        let mut items: Vec<TextItemPosition> = Vec::new();
+        collect_from_frame(&page.frame, 0.0, 0.0, &mut items);
+        // Sort by baseline only; horizontal order is decided per line
+        // once its runs are known (see `group_into_lines`).
+        items.sort_by(|a, b| a.y_pt.total_cmp(&b.y_pt));
+        let lines = group_into_lines(items);
         page_strings.push(join_lines_with_paragraph_breaks(&lines));
     }
 
@@ -611,6 +625,9 @@ fn collect_from_frame(
                 out.push(TextItemPosition {
                     y_pt: item_y,
                     x_pt: item_x,
+                    width_pt: text_item.width().to_pt(),
+                    size_pt: text_item.size.to_pt(),
+                    rtl: text_item.lang.dir() == Dir::RTL,
                     text: text_item.text.to_string(),
                 });
             }
@@ -625,48 +642,82 @@ fn collect_from_frame(
     }
 }
 
-/// Group a y/x-sorted slice of text items into visual lines.
+/// Group baseline-sorted text runs into visual lines.
 ///
-/// Items whose `y_pt` is within [`LINE_TOLERANCE_PT`] of the current
-/// line's anchor y join that line; the line's text becomes the
-/// space-joined concatenation of its items. Returns
-/// `(anchor_y_pt, joined_text)` per line so the caller can decide
-/// where to insert paragraph breaks.
-fn group_into_lines(items: &[TextItemPosition]) -> Vec<(f64, String)> {
-    let mut lines: Vec<(f64, String)> = Vec::new();
+/// A run joins the current line when its baseline is within
+/// [`LINE_TOLERANCE_EM`] of the line's first run. Only once a line's
+/// runs are all known are they ordered horizontally — left to right,
+/// or right to left when every run is in an RTL language — so a
+/// sub-point baseline difference never reorders a row.
+fn group_into_lines(items: Vec<TextItemPosition>) -> Vec<Line> {
+    let mut groups: Vec<Vec<TextItemPosition>> = Vec::new();
     for item in items {
-        match lines.last_mut() {
-            Some((anchor_y, text)) if (item.y_pt - *anchor_y).abs() <= LINE_TOLERANCE_PT => {
-                if !text.is_empty() && !item.text.is_empty() {
-                    text.push(' ');
-                }
-                text.push_str(&item.text);
+        match groups.last_mut() {
+            Some(group)
+                if (item.y_pt - group[0].y_pt).abs()
+                    <= LINE_TOLERANCE_EM * item.size_pt.min(group[0].size_pt) =>
+            {
+                group.push(item);
             }
-            _ => {
-                lines.push((item.y_pt, item.text.clone()));
-            }
+            _ => groups.push(vec![item]),
         }
     }
-    lines
+    groups.into_iter().map(join_line).collect()
 }
 
-/// Join `(y_pt, text)` lines into a single string, inserting a blank
-/// line between consecutive lines whose vertical gap exceeds
-/// [`PARAGRAPH_GAP_PT`].
-fn join_lines_with_paragraph_breaks(lines: &[(f64, String)]) -> String {
+/// Order one line's runs in reading direction and concatenate them,
+/// inserting a space only where the runs are visibly apart
+/// ([`WORD_GAP_EM`]) and neither side already supplies whitespace.
+fn join_line(mut runs: Vec<TextItemPosition>) -> Line {
+    // The anchor (first, highest) run's baseline stands for the line.
+    let y_pt = runs[0].y_pt;
+    let rtl = runs.iter().all(|r| r.rtl);
+    runs.sort_by(|a, b| {
+        let ord = a.x_pt.total_cmp(&b.x_pt);
+        if rtl { ord.reverse() } else { ord }
+    });
+    let mut text = String::new();
+    let mut prev: Option<&TextItemPosition> = None;
+    for run in &runs {
+        if let Some(prev) = prev {
+            let gap = if rtl {
+                prev.x_pt - (run.x_pt + run.width_pt)
+            } else {
+                run.x_pt - (prev.x_pt + prev.width_pt)
+            };
+            let has_space =
+                text.ends_with(char::is_whitespace) || run.text.starts_with(char::is_whitespace);
+            if !has_space && gap > WORD_GAP_EM * run.size_pt.min(prev.size_pt) {
+                text.push(' ');
+            }
+        }
+        text.push_str(&run.text);
+        prev = Some(run);
+    }
+    Line {
+        y_pt,
+        size_pt: runs.iter().map(|r| r.size_pt).fold(0.0, f64::max),
+        text,
+    }
+}
+
+/// Join lines into a single string, inserting a blank line between
+/// consecutive lines whose baseline gap exceeds [`PARAGRAPH_GAP_EM`]
+/// of the lower line's font size.
+fn join_lines_with_paragraph_breaks(lines: &[Line]) -> String {
     let mut out = String::new();
-    let mut prev_y: Option<f64> = None;
-    for (y, text) in lines {
-        if let Some(prev) = prev_y {
-            let gap = y - prev;
-            if gap > PARAGRAPH_GAP_PT {
+    let mut prev: Option<&Line> = None;
+    for line in lines {
+        if let Some(prev) = prev {
+            let gap = line.y_pt - prev.y_pt;
+            if gap > PARAGRAPH_GAP_EM * line.size_pt {
                 out.push_str("\n\n");
             } else {
                 out.push('\n');
             }
         }
-        out.push_str(text);
-        prev_y = Some(*y);
+        out.push_str(&line.text);
+        prev = Some(line);
     }
     out
 }
@@ -1294,7 +1345,7 @@ mod tests {
     fn extract_text_paragraph_break_inserts_blank_line() {
         // Two paragraphs separated by a hard parbreak. The frame walk
         // should see a vertical gap between the two text runs that
-        // exceeds PARAGRAPH_GAP_PT and emit a blank line between
+        // exceeds PARAGRAPH_GAP_EM and emit a blank line between
         // them.
         let source = "First paragraph.\n\nSecond paragraph.";
         let out = compile_text_from_source(source, &Value::Object(Default::default()))
@@ -1311,6 +1362,48 @@ mod tests {
             out.contains("\n\n"),
             "expected a blank line between paragraphs; got: {out:?}"
         );
+    }
+
+    #[test]
+    fn extract_text_keeps_wrapped_lines_contiguous() {
+        // A paragraph forced to wrap, then a `linebreak()`-separated
+        // line, then a parbreak: only the parbreak becomes a blank.
+        let source = "#set page(width: 8cm)\n\
+                      A paragraph long enough that it has to wrap onto a second line here.#linebreak()\n\
+                      After a linebreak.\n\nNext paragraph.";
+        let out = compile_text_from_source(source, &Value::Object(Default::default()))
+            .expect("source must compile");
+        let blocks: Vec<&str> = out.trim_end().split("\n\n").collect();
+        assert_eq!(blocks.len(), 2, "got: {out:?}");
+        assert!(blocks[0].lines().count() >= 3, "got: {out:?}");
+        assert!(blocks[0].ends_with("After a linebreak."), "got: {out:?}");
+        assert_eq!(blocks[1], "Next paragraph.");
+    }
+
+    #[test]
+    fn extract_text_reads_a_row_left_to_right() {
+        // A smaller right-aligned date sits a fraction of a point above
+        // the title's baseline; it must still follow the title.
+        let source = "#grid(columns: (1fr, auto), [Title, Org], text(size: 8pt)[2020 - 2024])";
+        let out = compile_text_from_source(source, &Value::Object(Default::default()))
+            .expect("source must compile");
+        assert_eq!(out, "Title, Org 2020 - 2024\n");
+    }
+
+    #[test]
+    fn extract_text_joins_touching_runs_without_a_space() {
+        let source = "*Label*: details";
+        let out = compile_text_from_source(source, &Value::Object(Default::default()))
+            .expect("source must compile");
+        assert_eq!(out, "Label: details\n");
+    }
+
+    #[test]
+    fn extract_text_reads_an_rtl_line_in_logical_order() {
+        let source = "#set text(lang: \"he\")\nHello שלום עולם world";
+        let out = compile_text_from_source(source, &Value::Object(Default::default()))
+            .expect("source must compile");
+        assert_eq!(out, "Hello שלום עולם world\n");
     }
 
     #[test]
