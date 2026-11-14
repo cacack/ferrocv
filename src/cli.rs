@@ -25,7 +25,7 @@ use clap::{Args, Parser, Subcommand};
 use serde_json::Value;
 
 use crate::{
-    BulletSection, ProjectionError, ProjectionSpec, RedactSet, THEMES, ThemeResolveError,
+    BulletSection, ProjectionError, ProjectionSpec, RedactSet, Rendered, THEMES, ThemeResolveError,
     ValidationError, compile_html_resolved, compile_text_resolved, compile_theme_resolved, project,
     resolve_theme, validate_value,
 };
@@ -920,29 +920,31 @@ fn run_render(
 
     // Step 6: format dispatch. PDF returns bytes; text and HTML both
     // return a String which we convert to UTF-8 bytes for the shared
-    // write path below.
-    let bytes: Vec<u8> = match format {
-        Format::Pdf => match compile_theme_resolved(&theme, &value) {
-            Ok(bytes) => bytes,
-            Err(err) => {
-                eprintln!("{err}");
-                return Ok(ExitCode::from(2));
+    // write path below. Non-fatal Typst warnings (tofu glyphs, unknown
+    // fonts, dropped content) go to stderr, never stdout, and do not
+    // change the exit code (issue #288).
+    let rendered = match format {
+        Format::Pdf => compile_theme_resolved(&theme, &value),
+        Format::Text => compile_text_resolved(&theme, &value).map(|r| Rendered {
+            output: r.output.into_bytes(),
+            warnings: r.warnings,
+        }),
+        Format::Html => compile_html_resolved(&theme, &value).map(|r| Rendered {
+            output: r.output.into_bytes(),
+            warnings: r.warnings,
+        }),
+    };
+    let bytes: Vec<u8> = match rendered {
+        Ok(Rendered { output, warnings }) => {
+            for warning in &warnings {
+                eprintln!("{warning}");
             }
-        },
-        Format::Text => match compile_text_resolved(&theme, &value) {
-            Ok(text) => text.into_bytes(),
-            Err(err) => {
-                eprintln!("{err}");
-                return Ok(ExitCode::from(2));
-            }
-        },
-        Format::Html => match compile_html_resolved(&theme, &value) {
-            Ok(html) => html.into_bytes(),
-            Err(err) => {
-                eprintln!("{err}");
-                return Ok(ExitCode::from(2));
-            }
-        },
+            output
+        }
+        Err(err) => {
+            eprintln!("{err}");
+            return Ok(ExitCode::from(2));
+        }
     };
 
     // Step 7: write output. Default path depends on format; parent

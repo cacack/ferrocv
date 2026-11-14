@@ -15,8 +15,8 @@ pub mod validate;
 
 pub use project::{BulletSection, ProjectionError, ProjectionSpec, RedactSet, project};
 pub use render::{
-    RenderDiagnostic, RenderError, compile_html, compile_html_resolved, compile_pdf, compile_text,
-    compile_text_resolved, compile_theme, compile_theme_resolved,
+    RenderDiagnostic, RenderError, RenderWarning, Rendered, compile_html, compile_html_resolved,
+    compile_pdf, compile_text, compile_text_resolved, compile_theme, compile_theme_resolved,
 };
 pub use theme::{
     OwnedTheme, PRELUDE_BYTES, PRELUDE_PATH, ResolvedTheme, THEMES, Theme, ThemeResolveError,

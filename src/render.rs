@@ -92,11 +92,14 @@
 //!
 //! # Warnings
 //!
-//! Typst's `compile` returns a `Warned<Result<...>>`. For Phase 1 we
-//! discard the warnings; only fatal diagnostics surface as
-//! [`RenderError`]. Surfacing warnings is intentionally deferred until
-//! a caller (a theme adapter or the `render` CLI subcommand) has a
-//! concrete need for them.
+//! Typst's `compile` returns a `Warned<Result<...>>`. Fatal diagnostics
+//! surface as [`RenderError`]; non-fatal warnings (missing glyphs,
+//! unknown font families, content an exporter drops) are returned
+//! alongside the output as [`RenderWarning`]s in a [`Rendered`] by the
+//! `compile_*_resolved` family, which the `render` CLI prints to
+//! stderr (issue #288). The shorthand `compile_pdf` / `compile_theme`
+//! / `compile_text` / `compile_html` entry points return the output
+//! only; callers who need the warnings use the `_resolved` variants.
 //!
 //! # Library only
 //!
@@ -197,6 +200,34 @@ impl fmt::Display for RenderError {
 
 impl std::error::Error for RenderError {}
 
+/// One non-fatal Typst warning, flattened like [`RenderDiagnostic`].
+///
+/// A warning means compilation succeeded but the output may be
+/// degraded — e.g. glyphs no bundled font covers render as tofu, or a
+/// theme asked for a font family that is not bundled.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderWarning {
+    /// Human-readable warning message from the Typst compiler.
+    pub message: String,
+}
+
+impl fmt::Display for RenderWarning {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "warning: {}", self.message)
+    }
+}
+
+/// A successful render: the output plus any non-fatal warnings Typst
+/// raised while producing it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Rendered<T> {
+    /// The rendered document (PDF bytes, plain text, or HTML).
+    pub output: T,
+    /// Warnings in the order Typst reported them; empty for a clean
+    /// render.
+    pub warnings: Vec<RenderWarning>,
+}
+
 /// Compile a single Typst source string to PDF bytes, in-process.
 ///
 /// `source` is a complete Typst document. `data` is the JSON Resume
@@ -213,11 +244,11 @@ impl std::error::Error for RenderError {}
 ///
 /// # Warnings
 ///
-/// Non-fatal Typst warnings are **discarded**; only errors surface.
-/// See the module-level documentation for the rationale.
+/// Non-fatal Typst warnings are not returned; only errors surface.
+/// Use [`compile_theme_resolved`] to receive them.
 pub fn compile_pdf(source: &str, data: &Value) -> Result<Vec<u8>, RenderError> {
     let world = FerrocvWorld::from_single_source(source, data);
-    render_world(&world)
+    render_world(&world).map(|r| r.output)
 }
 
 /// Compile a [`Theme`] bundle to PDF bytes against a JSON Resume
@@ -238,7 +269,7 @@ pub fn compile_pdf(source: &str, data: &Value) -> Result<Vec<u8>, RenderError> {
 /// (CONSTITUTION §6.1).
 pub fn compile_theme(theme: &Theme, data: &Value) -> Result<Vec<u8>, RenderError> {
     let world = FerrocvWorld::from_theme(theme, data);
-    render_world(&world)
+    render_world(&world).map(|r| r.output)
 }
 
 /// Compile a [`Theme`] bundle to a UTF-8 plain-text rendering against
@@ -296,7 +327,7 @@ pub fn compile_theme(theme: &Theme, data: &Value) -> Result<Vec<u8>, RenderError
 /// `diagnostics_to_error` helper unchanged.
 pub fn compile_text(theme: &Theme, data: &Value) -> Result<String, RenderError> {
     let world = FerrocvWorld::from_theme(theme, data);
-    render_world_to_text(&world)
+    render_world_to_text(&world).map(|r| r.output)
 }
 
 /// Compile a [`Theme`] bundle to a single-file HTML document against
@@ -331,7 +362,7 @@ pub fn compile_text(theme: &Theme, data: &Value) -> Result<String, RenderError> 
 /// for some theme sources) surface as plain compile errors here.
 pub fn compile_html(theme: &Theme, data: &Value) -> Result<String, RenderError> {
     let world = FerrocvWorld::from_theme(theme, data);
-    render_world_to_html(&world)
+    render_world_to_html(&world).map(|r| r.output)
 }
 
 /// Compile a [`ResolvedTheme`] to PDF bytes against a JSON Resume
@@ -343,8 +374,12 @@ pub fn compile_html(theme: &Theme, data: &Value) -> Result<String, RenderError> 
 /// Exists so CLI and other higher-level callers do not have to
 /// match on [`ResolvedTheme`] variants themselves.
 ///
-/// See [`compile_theme`] for the full contract.
-pub fn compile_theme_resolved(theme: &ResolvedTheme, data: &Value) -> Result<Vec<u8>, RenderError> {
+/// See [`compile_theme`] for the full contract. Unlike it, returns
+/// any non-fatal Typst warnings alongside the output.
+pub fn compile_theme_resolved(
+    theme: &ResolvedTheme,
+    data: &Value,
+) -> Result<Rendered<Vec<u8>>, RenderError> {
     let world = FerrocvWorld::from_bundle(theme, data);
     render_world(&world)
 }
@@ -353,8 +388,12 @@ pub fn compile_theme_resolved(theme: &ResolvedTheme, data: &Value) -> Result<Vec
 /// a JSON Resume value.
 ///
 /// Companion to [`compile_theme_resolved`]. See [`compile_text`] for
-/// the frame-walk extractor rationale.
-pub fn compile_text_resolved(theme: &ResolvedTheme, data: &Value) -> Result<String, RenderError> {
+/// the frame-walk extractor rationale. Returns warnings alongside the
+/// output.
+pub fn compile_text_resolved(
+    theme: &ResolvedTheme,
+    data: &Value,
+) -> Result<Rendered<String>, RenderError> {
     let world = FerrocvWorld::from_bundle(theme, data);
     render_world_to_text(&world)
 }
@@ -363,26 +402,28 @@ pub fn compile_text_resolved(theme: &ResolvedTheme, data: &Value) -> Result<Stri
 /// a JSON Resume value.
 ///
 /// Companion to [`compile_theme_resolved`]. See [`compile_html`] for
-/// the experimental-upstream caveat.
-pub fn compile_html_resolved(theme: &ResolvedTheme, data: &Value) -> Result<String, RenderError> {
+/// the experimental-upstream caveat. Returns warnings alongside the
+/// output.
+pub fn compile_html_resolved(
+    theme: &ResolvedTheme,
+    data: &Value,
+) -> Result<Rendered<String>, RenderError> {
     let world = FerrocvWorld::from_bundle(theme, data);
     render_world_to_html(&world)
 }
 
 /// Shared compile + PDF-serialize path used by both entry points.
-fn render_world(world: &FerrocvWorld) -> Result<Vec<u8>, RenderError> {
-    // `typst::compile` returns Warned { output, warnings }. Drop
-    // warnings — see module doc for rationale.
-    let Warned {
-        output,
-        warnings: _,
-    } = typst::compile::<PagedDocument>(world);
+fn render_world(world: &FerrocvWorld) -> Result<Rendered<Vec<u8>>, RenderError> {
+    let Warned { output, warnings } = typst::compile::<PagedDocument>(world);
     let document = output.map_err(diagnostics_to_error)?;
 
     // Serialize to PDF. `typst_pdf::pdf` can also emit diagnostics
     // (e.g. for unsupported font features) — surface them via the
     // same RenderError path.
-    typst_pdf::pdf(&document, &PdfOptions::default()).map_err(diagnostics_to_error)
+    let output = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(diagnostics_to_error)?;
+    let mut warnings = to_warnings(&warnings);
+    warnings.extend(missing_glyph_warning(&document));
+    Ok(Rendered { output, warnings })
 }
 
 /// Shared compile + frame-walk path used by [`compile_text`].
@@ -391,13 +432,13 @@ fn render_world(world: &FerrocvWorld) -> Result<Vec<u8>, RenderError> {
 /// surface diagnostics through the same path, then replace the
 /// `typst_pdf::pdf` step with [`extract_text`] over the resulting
 /// [`PagedDocument`].
-fn render_world_to_text(world: &FerrocvWorld) -> Result<String, RenderError> {
-    let Warned {
-        output,
-        warnings: _,
-    } = typst::compile::<PagedDocument>(world);
+fn render_world_to_text(world: &FerrocvWorld) -> Result<Rendered<String>, RenderError> {
+    let Warned { output, warnings } = typst::compile::<PagedDocument>(world);
     let document = output.map_err(diagnostics_to_error)?;
-    Ok(extract_text(&document))
+    Ok(Rendered {
+        output: extract_text(&document),
+        warnings: to_warnings(&warnings),
+    })
 }
 
 /// Shared compile + HTML-serialize path used by [`compile_html`].
@@ -408,13 +449,15 @@ fn render_world_to_text(world: &FerrocvWorld) -> Result<String, RenderError> {
 /// `typst_html::html`. The [`Feature::Html`] library flag must be
 /// enabled for `typst::compile::<HtmlDocument>` to succeed; see
 /// [`shared_library`].
-fn render_world_to_html(world: &FerrocvWorld) -> Result<String, RenderError> {
-    let Warned {
-        output,
-        warnings: _,
-    } = typst::compile::<HtmlDocument>(world);
+fn render_world_to_html(world: &FerrocvWorld) -> Result<Rendered<String>, RenderError> {
+    let Warned { output, warnings } = typst::compile::<HtmlDocument>(world);
     let document = output.map_err(diagnostics_to_error)?;
-    typst_html::html(&document, &HtmlOptions::default()).map_err(diagnostics_to_error)
+    let output =
+        typst_html::html(&document, &HtmlOptions::default()).map_err(diagnostics_to_error)?;
+    Ok(Rendered {
+        output,
+        warnings: to_warnings(&warnings),
+    })
 }
 
 /// Maximum vertical distance (in PostScript points) between two text
@@ -645,6 +688,88 @@ where
         })
         .collect();
     RenderError { diagnostics }
+}
+
+/// Typst's warning on every HTML compile when [`Feature::Html`] is
+/// enabled. `ferrocv` opts into that flag deliberately and documents the
+/// caveat (module docs, README), so repeating it on each
+/// `--format html` render is noise the user cannot act on; we drop it.
+const HTML_EXPERIMENTAL_WARNING: &str = "html export is under active development and incomplete";
+
+/// Flatten Typst's compile warnings into [`RenderWarning`]s.
+///
+/// Identical messages are collapsed to their first occurrence: without
+/// spans they are indistinguishable, and a theme that uses an
+/// HTML-ignored element in a loop would otherwise repeat one line per
+/// entry. [`HTML_EXPERIMENTAL_WARNING`] is dropped.
+fn to_warnings(warnings: &[typst::diag::SourceDiagnostic]) -> Vec<RenderWarning> {
+    let mut out: Vec<RenderWarning> = Vec::new();
+    for w in warnings {
+        let message = w.message.as_str();
+        if message == HTML_EXPERIMENTAL_WARNING || out.iter().any(|o| o.message == message) {
+            continue;
+        }
+        out.push(RenderWarning {
+            message: message.to_owned(),
+        });
+    }
+    out
+}
+
+/// Upper bound on distinct characters [`missing_glyph_warning`] lists,
+/// so a resume written wholly in an uncovered script yields one
+/// readable line rather than hundreds of characters.
+const MISSING_GLYPH_LIST_MAX: usize = 20;
+
+/// Warn when the laid-out document contains glyphs no bundled font
+/// covers.
+///
+/// Typst raises no diagnostic for this: when every font in the
+/// fallback chain lacks a character it shapes the `.notdef` glyph
+/// (id 0), which the PDF shows as an empty box ("tofu"). We walk the
+/// frame tree for such glyphs and report the distinct characters they
+/// stand for, in first-seen order. Paged PDF output only — the text
+/// extractor reads the source characters, and HTML defers fonts to the
+/// browser, so neither is degraded.
+fn missing_glyph_warning(document: &PagedDocument) -> Option<RenderWarning> {
+    fn walk(frame: &Frame, missing: &mut Vec<char>) {
+        for (_, item) in frame.items() {
+            match item {
+                FrameItem::Text(text) => {
+                    for glyph in text.glyphs.iter().filter(|g| g.id == 0) {
+                        let chars = text.text.get(glyph.range()).unwrap_or_default();
+                        for c in chars.chars().filter(|c| !c.is_whitespace()) {
+                            if !missing.contains(&c) {
+                                missing.push(c);
+                            }
+                        }
+                    }
+                }
+                FrameItem::Group(group) => walk(&group.frame, missing),
+                _ => {}
+            }
+        }
+    }
+
+    let mut missing = Vec::new();
+    for page in document.pages() {
+        walk(&page.frame, &mut missing);
+    }
+    if missing.is_empty() {
+        return None;
+    }
+    let total = missing.len();
+    let mut listed: String = missing.iter().take(MISSING_GLYPH_LIST_MAX).collect();
+    if total > MISSING_GLYPH_LIST_MAX {
+        listed.push_str(&format!(" (and {} more)", total - MISSING_GLYPH_LIST_MAX));
+    }
+    Some(RenderWarning {
+        message: format!(
+            "missing glyphs: no bundled font covers {total} character{} ({listed}); \
+             they render as empty boxes",
+            if total == 1 { "" } else { "s" },
+        ),
+    })
 }
 
 /// If `message` is Typst's canonical "package not found (searched for
@@ -1055,7 +1180,47 @@ mod tests {
     /// needing a [`Theme`] bundle.
     fn compile_text_from_source(source: &str, data: &Value) -> Result<String, RenderError> {
         let world = FerrocvWorld::from_single_source(source, data);
-        render_world_to_text(&world)
+        render_world_to_text(&world).map(|r| r.output)
+    }
+
+    fn warnings_for(source: &str) -> Vec<RenderWarning> {
+        let world = FerrocvWorld::from_single_source(source, &Value::Object(Default::default()));
+        render_world(&world).expect("source must compile").warnings
+    }
+
+    #[test]
+    fn clean_source_has_no_warnings() {
+        assert_eq!(warnings_for("Hello, world."), Vec::new());
+    }
+
+    #[test]
+    fn repeated_warning_is_reported_once() {
+        let warnings = warnings_for("#text(font: \"Nope\")[a] #text(font: \"Nope\")[b]");
+        assert_eq!(
+            warnings,
+            vec![RenderWarning {
+                message: "unknown font family: nope".to_owned()
+            }]
+        );
+    }
+
+    #[test]
+    fn uncovered_glyphs_raise_one_missing_glyph_warning() {
+        let warnings = warnings_for("山田 山田");
+        assert_eq!(warnings.len(), 1, "got: {warnings:?}");
+        assert!(
+            warnings[0].message.contains("2 characters (山田)"),
+            "got: {}",
+            warnings[0]
+        );
+        assert!(warnings[0].to_string().starts_with("warning: "));
+    }
+
+    #[test]
+    fn html_experimental_notice_is_dropped() {
+        let world = FerrocvWorld::from_single_source("Hello.", &Value::Object(Default::default()));
+        let rendered = render_world_to_html(&world).expect("source must compile");
+        assert_eq!(rendered.warnings, Vec::new());
     }
 
     #[test]

@@ -70,7 +70,9 @@ fn render_writes_pdf_to_output_path() {
         .arg(&out)
         .assert()
         .success()
-        .stderr(predicate::str::is_empty());
+        // This theme/format pair raises Typst warnings (#288); only
+        // the absence of errors is asserted here.
+        .stderr(predicate::str::contains("error:").not());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     assert_eq!(
@@ -107,7 +109,9 @@ fn render_accepts_sparse_schema_valid_resume() {
         .arg(&out)
         .assert()
         .success()
-        .stderr(predicate::str::is_empty());
+        // This theme/format pair raises Typst warnings (#288); only
+        // the absence of errors is asserted here.
+        .stderr(predicate::str::contains("error:").not());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     assert_eq!(
@@ -479,7 +483,9 @@ fn render_writes_html_to_output_path() {
         .arg(&out)
         .assert()
         .success()
-        .stderr(predicate::str::is_empty());
+        // This theme/format pair raises Typst warnings (#288); only
+        // the absence of errors is asserted here.
+        .stderr(predicate::str::contains("error:").not());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     let body = std::fs::read_to_string(&out).expect("HTML output must be UTF-8");
@@ -629,7 +635,9 @@ fn render_html_fantastic_cv_happy_path() {
         .arg(&out)
         .assert()
         .success()
-        .stderr(predicate::str::is_empty());
+        // This theme/format pair raises Typst warnings (#288); only
+        // the absence of errors is asserted here.
+        .stderr(predicate::str::contains("error:").not());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     let size = std::fs::metadata(&out).expect("stat").len();
@@ -658,7 +666,9 @@ fn render_html_modern_cv_happy_path() {
         .arg(&out)
         .assert()
         .success()
-        .stderr(predicate::str::is_empty());
+        // This theme/format pair raises Typst warnings (#288); only
+        // the absence of errors is asserted here.
+        .stderr(predicate::str::contains("error:").not());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     let size = std::fs::metadata(&out).expect("stat").len();
@@ -1220,4 +1230,86 @@ fn render_audience_equivalent_to_tailor_then_render() {
         direct_text, piped_text,
         "render --audience must equal tailor --audience | render"
     );
+}
+
+// ---- Typst warnings on stderr (issue #288) ----
+
+/// Given a resume whose name is CJK text no bundled font covers, when I
+/// render it to PDF with `classic`, then a missing-glyph warning naming
+/// those characters goes to stderr, stdout stays empty, the PDF is
+/// still written, and the exit code is 0.
+#[test]
+fn render_cjk_name_with_classic_warns_about_missing_glyphs() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    ferrocv()
+        .arg("render")
+        .arg("--theme")
+        .arg("classic")
+        .arg("--output")
+        .arg(&out)
+        .write_stdin(r#"{"basics":{"name":"山田太郎"}}"#)
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains("warning: missing glyphs"))
+        .stderr(predicate::str::contains("山田太郎"));
+
+    assert_eq!(read_prefix(&out, 5), b"%PDF-");
+}
+
+/// Given a local theme that sets a font family ferrocv does not bundle,
+/// when I render with it, then a `warning:` line naming that family goes
+/// to stderr, stdout stays empty, and the exit code is 0.
+#[test]
+fn render_with_unbundled_font_family_warns_naming_it() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let theme = tmp.path().join("font.typ");
+    std::fs::write(
+        &theme,
+        "#set text(font: \"Nonexistent Sans\")\n#let r = json(\"/resume.json\")\n= #r.basics.name\n",
+    )
+    .expect("write theme");
+    let out = tmp.path().join("out.pdf");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg(&theme)
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains(
+            "warning: unknown font family: nonexistent sans",
+        ));
+
+    assert!(out.exists(), "output must still be written on a warning");
+}
+
+/// Given a resume every default theme renders cleanly, when I render it
+/// in each format with its default theme, then stderr is empty — no
+/// warning lines, and in particular no repeat of Typst's
+/// HTML-is-experimental notice.
+#[test]
+fn render_default_themes_emit_no_warnings() {
+    for format in ["pdf", "text", "html"] {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let out = tmp.path().join(format!("out.{format}"));
+
+        ferrocv()
+            .arg("render")
+            .arg(fixture("render_full"))
+            .arg("--format")
+            .arg(format)
+            .arg("--output")
+            .arg(&out)
+            .assert()
+            .success()
+            .stdout(predicate::str::is_empty())
+            .stderr(predicate::str::is_empty());
+    }
 }

@@ -290,6 +290,12 @@ Exit codes (shared across subcommands):
 - `2` — usage error, IO error, JSON parse error, unknown theme/format,
   render error, or unrecoverable stdout write failure
 
+A render that succeeds but may be degraded still exits `0` and prints
+one `warning: <message>` line per Typst warning to stderr (never
+stdout) — e.g. characters no bundled font covers (they render as empty
+boxes in PDF), a theme asking for a font family that is not bundled, or
+content the chosen output format drops.
+
 No network is touched by `render` or `validate` — the schema, theme,
 and fonts are all compiled into the binary, and any `@preview/...`
 theme spec is resolved from the local install cache. The only
