@@ -1,0 +1,137 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json",
+  "meta": {
+    "canonical": "https://example.com/resume.json",
+    "version": "v1.0.0",
+    "lastModified": "2026-01-01T00:00:00",
+    "language": "en"
+  },
+  "basics": {
+    "name": "Ada Lovelace",
+    "label": "Computing Pioneer",
+    "image": "https://example.com/ada.png",
+    "email": "ada@example.com",
+    "phone": "+44-20-0000-0000",
+    "url": "https://example.com/ada",
+    "summary": "Mathematician and writer.",
+    "location": {
+      "address": "St James's Square",
+      "postalCode": "SW1Y 4LB",
+      "city": "London",
+      "countryCode": "GB",
+      "region": "England"
+    },
+    "profiles": [
+      {
+        "network": "GitHub",
+        "username": "ada",
+        "url": "https://github.example.com/ada"
+      },
+      {
+        "network": "LinkedIn",
+        "username": "ada-lovelace",
+        "url": "https://linkedin.example.com/in/ada-lovelace"
+      }
+    ]
+  },
+  "work": [
+    {
+      "name": "Analytical Engines Ltd",
+      "location": "London",
+      "description": "Mechanical computing",
+      "position": "Programmer",
+      "url": "https://analytical.example.com",
+      "startDate": "1843-01-01",
+      "endDate": "1852-11-27",
+      "summary": "Wrote the first published algorithm.",
+      "highlights": ["Published the Bernoulli-number algorithm"]
+    }
+  ],
+  "volunteer": [
+    {
+      "organization": "Royal Society",
+      "position": "Correspondent",
+      "url": "https://example.com/royal-society",
+      "startDate": "1840-01-01",
+      "endDate": "1845-01-01",
+      "summary": "Corresponded on mathematics.",
+      "highlights": ["Exchanged letters with De Morgan"]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of London",
+      "url": "https://example.com/london",
+      "area": "Mathematics",
+      "studyType": "Self-directed",
+      "startDate": "1833-01-01",
+      "endDate": "1843-01-01",
+      "score": "First",
+      "courses": ["Calculus"]
+    }
+  ],
+  "awards": [
+    {
+      "title": "Honorary Mention",
+      "date": "1843-09-01",
+      "awarder": "Analytical Society",
+      "summary": "For Note G."
+    }
+  ],
+  "certificates": [
+    {
+      "name": "Fellowship in Computing History",
+      "date": "1843-09-01",
+      "url": "https://example.com/cert",
+      "issuer": "Analytical Engines Ltd"
+    }
+  ],
+  "publications": [
+    {
+      "name": "Notes on the Analytical Engine",
+      "publisher": "Taylor's Scientific Memoirs",
+      "releaseDate": "1843-09-01",
+      "url": "https://example.com/notes",
+      "summary": "Translation with extensive notes."
+    }
+  ],
+  "skills": [
+    {
+      "name": "Programming",
+      "level": "Pioneer",
+      "keywords": ["Algorithms"]
+    }
+  ],
+  "languages": [
+    {
+      "language": "English",
+      "fluency": "Native speaker"
+    }
+  ],
+  "interests": [
+    {
+      "name": "Poetical Science",
+      "keywords": ["Imagination"]
+    }
+  ],
+  "references": [
+    {
+      "name": "Charles Babbage",
+      "reference": "The Enchantress of Numbers."
+    }
+  ],
+  "projects": [
+    {
+      "name": "Note G",
+      "description": "The Bernoulli-number algorithm.",
+      "highlights": ["First published machine algorithm"],
+      "keywords": ["Algorithms"],
+      "startDate": "1842-01-01",
+      "endDate": "1843-07-01",
+      "url": "https://example.com/note-g",
+      "roles": ["Author"],
+      "entity": "Analytical Engines Ltd",
+      "type": "publication"
+    }
+  ]
+}

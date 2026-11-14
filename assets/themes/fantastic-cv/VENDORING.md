@@ -138,7 +138,10 @@ touching `fantastic-cv.typ`:
   first; `project[].keywords` is the fallback (both are schema-legal).
 - **Skills:** fantastic-cv has no dedicated skills builder, so JSON
   Resume `skills` surface via `render-custom` as a "Skills" section.
-  Empty or missing `skills` emits no section.
+  Empty or missing `skills` emits no section. A skill with absent or
+  empty `keywords` renders an empty description: the glue joins with
+  `default: ""` because `render-custom` calls `.len()` on it and an
+  empty join yields `none` (issue #291).
 
 ## Updating
 
