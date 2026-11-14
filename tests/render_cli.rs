@@ -694,7 +694,7 @@ fn render_every_theme_format_pair_is_complete_or_rejected() {
                 .assert();
             let pair = format!("{} --format {format}", theme.name);
 
-            if theme.supports(format) {
+            if theme.formats.contains(&format) {
                 assert.success().stderr(only_warnings());
                 let text = visible_text(format, &out);
                 for name in &names {
@@ -792,6 +792,39 @@ fn render_local_theme_with_no_text_is_an_error() {
             .arg(fixture("render_full"))
             .arg("--theme")
             .arg(&theme)
+            .arg("--format")
+            .arg(format)
+            .arg("--output")
+            .arg(&out)
+            .assert()
+            .code(2)
+            .stderr(predicate::str::contains(
+                "error: the rendered document contains no text",
+            ));
+        assert!(
+            !out.exists(),
+            "--format {format}: no output file may be written"
+        );
+    }
+}
+
+/// Given a schema-valid but empty resume (`{}` — JSON Resume requires
+/// no fields), when I render it with a bundled paged theme that prints
+/// nothing for it, then render exits 2 rather than writing a blank PDF
+/// or empty text file (issue #289). This pins the decision deliberately.
+#[test]
+fn render_empty_resume_is_an_error() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let input = tmp.path().join("empty.json");
+    std::fs::write(&input, "{}").expect("write input");
+
+    for format in ["pdf", "text"] {
+        let out = tmp.path().join(format!("out.{format}"));
+        ferrocv()
+            .arg("render")
+            .arg(&input)
+            .arg("--theme")
+            .arg("classic")
             .arg("--format")
             .arg(format)
             .arg("--output")

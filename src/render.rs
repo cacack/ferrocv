@@ -261,6 +261,9 @@ impl<T> Rendered<T> {
 ///
 /// Non-fatal Typst warnings are not returned; only errors surface.
 /// Use [`compile_theme_resolved`] to receive them.
+///
+/// A document whose pages carry no text at all is an error rather than
+/// a blank PDF, as for [`compile_theme`].
 pub fn compile_pdf(source: &str, data: &Value) -> Result<Vec<u8>, RenderError> {
     let world = FerrocvWorld::from_single_source(source, data);
     render_world(&world).map(|r| r.output)
@@ -341,7 +344,8 @@ pub fn compile_theme(theme: &Theme, data: &Value) -> Result<Vec<u8>, RenderError
 ///
 /// Returns the same [`RenderError`] type as the PDF path; Typst
 /// compilation diagnostics flow through the shared
-/// `diagnostics_to_error` helper unchanged.
+/// `diagnostics_to_error` helper unchanged. A document whose pages
+/// carry no text at all is an error rather than an empty string.
 pub fn compile_text(theme: &Theme, data: &Value) -> Result<String, RenderError> {
     let world = FerrocvWorld::from_theme(theme, data);
     render_world_to_text(&world).map(|r| r.output)
@@ -463,19 +467,20 @@ fn render_world_to_text(world: &FerrocvWorld) -> Result<Rendered<String>, Render
 
 /// Reject a paged render whose pages carry no text at all.
 ///
-/// A resume always has at least `basics.name`, so a blank PDF or an
-/// empty text file means the theme produced nothing for this format —
-/// typically an HTML-only theme (`html.*` elements are ignored in paged
-/// export) rendered to PDF or text. Failing here is what stops a local
-/// `.typ` theme, which cannot declare its formats, from exiting 0 with
-/// an empty document (issue #289).
+/// A blank PDF or an empty text file is never a useful resume. It means
+/// either the document has nothing this theme displays (JSON Resume
+/// requires no fields, so `{}` is schema-valid) or the theme produced
+/// nothing for this format — e.g. an HTML-only theme (`html.*` elements
+/// are ignored in paged export) rendered to PDF or text. Failing here is
+/// what stops a local `.typ` theme, which cannot declare its formats,
+/// from exiting 0 with an empty document (issue #289).
 fn require_text(extracted: &str) -> Result<(), RenderError> {
     if extracted.trim().is_empty() {
         return Err(RenderError {
             diagnostics: vec![RenderDiagnostic {
-                message: "the rendered document contains no text; the theme produced \
-                          no visible content for this format (an HTML-only theme renders \
-                          blank pages in PDF and text)"
+                message: "the rendered document contains no text; either the resume has \
+                          nothing this theme displays, or the theme does not support this \
+                          format (e.g. an HTML-only theme rendered to PDF or text)"
                     .to_string(),
             }],
         });

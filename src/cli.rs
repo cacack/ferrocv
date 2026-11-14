@@ -938,7 +938,8 @@ fn run_render(
     // blank pages, both while "succeeding" — so a bundled theme that
     // does not declare the format is a usage error, before any compile
     // (issue #289). Local and `@preview/...` themes declare nothing;
-    // the empty-output check in the render pipeline guards them.
+    // only the PDF/text empty-output check in the render pipeline
+    // guards them — HTML has no equivalent check.
     if let Some(formats) = theme.formats()
         && !formats.contains(&format)
     {

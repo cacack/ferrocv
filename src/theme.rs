@@ -127,8 +127,10 @@ const PAGED: &[Format] = &[Format::Pdf, Format::Text];
 /// path it will resolve under inside [`crate::render::FerrocvWorld`].
 /// `entrypoint` is the virtual path of the file `typst::compile`
 /// starts from. `formats` lists the output formats the theme produces
-/// complete output for; `render` rejects any other format up front
-/// rather than writing a silently gutted document (issue #289).
+/// complete output for; the `render` CLI rejects any other format up
+/// front rather than writing a silently gutted document (issue #289).
+/// The library's `compile_*` functions do not consult `formats`; callers
+/// that want the same guard check it themselves.
 ///
 /// All fields are `'static` because themes are defined as `const`s
 /// and their contents come from [`include_bytes!`].
@@ -145,13 +147,6 @@ pub struct Theme {
     pub entrypoint: &'static str,
     /// Output formats this theme renders completely. Must be non-empty.
     pub formats: &'static [Format],
-}
-
-impl Theme {
-    /// Whether this theme renders complete output in `format`.
-    pub fn supports(&self, format: Format) -> bool {
-        self.formats.contains(&format)
-    }
 }
 
 /// Virtual-path prefix for this theme's files inside the World.
