@@ -621,44 +621,133 @@ fn render_html_accepts_resume_on_stdin() {
     );
 }
 
-/// Adapter HTML happy-path: `fantastic-cv` was fixed for HTML
-/// compatibility in #59 (empty-URL guard); verify the fix extends to
-/// the CLI render path. Assertions are minimal — we only check the
-/// compile succeeds and produces an HTML file. Shape of that output
-/// is upstream-experimental and not something we want to pin.
-#[test]
-fn render_html_fantastic_cv_happy_path() {
-    let tmp = tempfile::tempdir().expect("tempdir");
-    let out = tmp.path().join("out.html");
-
-    ferrocv()
-        .arg("render")
-        .arg(fixture("render_full"))
-        .arg("--theme")
-        .arg("fantastic-cv")
-        .arg("--format")
-        .arg("html")
-        .arg("--output")
-        .arg(&out)
-        .assert()
-        .success()
-        // This theme/format pair raises Typst warnings (#288); stderr
-        // may carry them, but nothing else.
-        .stderr(only_warnings());
-
-    assert!(out.exists(), "output file must exist at {}", out.display());
-    let size = std::fs::metadata(&out).expect("stat").len();
-    assert!(
-        size > 0,
-        "HTML output should be non-empty, was {size} bytes"
-    );
+/// Every name the "complete output" check requires: `basics.name` and
+/// each work entry's `name` (issue #289).
+fn required_names(resume: &serde_json::Value) -> Vec<String> {
+    let mut names = vec![resume["basics"]["name"].as_str().unwrap().to_string()];
+    for entry in resume["work"].as_array().into_iter().flatten() {
+        if let Some(name) = entry["name"].as_str() {
+            names.push(name.to_string());
+        }
+    }
+    names
 }
 
-/// Adapter HTML happy-path: `modern-cv` (added in #58) compiles to
-/// HTML cleanly. Same minimal-assertion posture as the fantastic-cv
-/// case — we only assert compile success and non-empty output.
+/// The text a reader of `out` sees: PDF text layer, the text file, or
+/// the HTML `<body>` (so a name only in `<title>` or `<meta>` does not
+/// count). Whitespace is collapsed so a line wrap cannot split a match.
+fn visible_text(format: ferrocv::Format, out: &std::path::Path) -> String {
+    let text = match format {
+        ferrocv::Format::Pdf => {
+            let bytes = std::fs::read(out).expect("read PDF");
+            pdf_extract::extract_text_from_mem(&bytes).expect("extract PDF text")
+        }
+        ferrocv::Format::Text => std::fs::read_to_string(out).expect("read text"),
+        ferrocv::Format::Html => {
+            let html = std::fs::read_to_string(out).expect("read HTML");
+            let body = html.split_once("<body").map_or("", |(_, b)| b);
+            let mut text = String::new();
+            let mut in_tag = false;
+            for c in body.chars() {
+                match c {
+                    '<' => in_tag = true,
+                    '>' => {
+                        in_tag = false;
+                        text.push(' ');
+                    }
+                    _ if !in_tag => text.push(c),
+                    _ => {}
+                }
+            }
+            text
+        }
+    };
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Given `render_full.json`, when I render it through every bundled
+/// theme in every format, then each pair either exits 0 with output
+/// containing `basics.name` and every work entry's name, or exits 2
+/// naming the theme's supported formats and writes nothing — never exit
+/// 0 with the name missing (issue #289).
 #[test]
-fn render_html_modern_cv_happy_path() {
+fn render_every_theme_format_pair_is_complete_or_rejected() {
+    use ferrocv::Format;
+
+    let resume: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(fixture("render_full")).unwrap()).unwrap();
+    let names = required_names(&resume);
+
+    for theme in ferrocv::THEMES {
+        for format in [Format::Pdf, Format::Text, Format::Html] {
+            let tmp = tempfile::tempdir().expect("tempdir");
+            let out = tmp.path().join(format!("out.{format}"));
+            let assert = ferrocv()
+                .arg("render")
+                .arg(fixture("render_full"))
+                .arg("--theme")
+                .arg(theme.name)
+                .arg("--format")
+                .arg(format.as_str())
+                .arg("--output")
+                .arg(&out)
+                .assert();
+            let pair = format!("{} --format {format}", theme.name);
+
+            if theme.formats.contains(&format) {
+                assert.success().stderr(only_warnings());
+                let text = visible_text(format, &out);
+                for name in &names {
+                    assert!(
+                        text.contains(name.as_str()),
+                        "{pair}: output must contain {name:?}; got:\n{text}"
+                    );
+                }
+            } else {
+                let supported: Vec<&str> = theme.formats.iter().map(|f| f.as_str()).collect();
+                assert.code(2).stderr(predicate::str::contains(format!(
+                    "supported formats: {}",
+                    supported.join(", ")
+                )));
+                assert!(!out.exists(), "{pair}: no output file may be written");
+            }
+        }
+    }
+}
+
+/// Given the HTML-only `html-minimal` theme, when I render it to PDF,
+/// then render exits 2 naming `html` as the supported format and
+/// writes nothing — instead of a blank one-page PDF (issue #289).
+#[test]
+fn render_html_only_theme_to_pdf_is_usage_error() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg("html-minimal")
+        .arg("--format")
+        .arg("pdf")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(2)
+        .stdout(predicate::str::is_empty())
+        .stderr(predicate::str::contains(
+            "error: theme `html-minimal` does not support --format pdf; \
+             supported formats: html; no output written",
+        ));
+
+    assert!(!out.exists(), "no output file may be written");
+}
+
+/// Given the paged `classic` theme, when I render it to HTML, then
+/// render exits 2 naming `pdf, text` — instead of HTML missing the
+/// name and every entry header (issue #289).
+#[test]
+fn render_paged_theme_to_html_is_usage_error() {
     let tmp = tempfile::tempdir().expect("tempdir");
     let out = tmp.path().join("out.html");
 
@@ -666,23 +755,90 @@ fn render_html_modern_cv_happy_path() {
         .arg("render")
         .arg(fixture("render_full"))
         .arg("--theme")
-        .arg("modern-cv")
+        .arg("classic")
         .arg("--format")
         .arg("html")
         .arg("--output")
         .arg(&out)
         .assert()
-        .success()
-        // This theme/format pair raises Typst warnings (#288); stderr
-        // may carry them, but nothing else.
-        .stderr(only_warnings());
+        .code(2)
+        .stderr(predicate::str::contains(
+            "error: theme `classic` does not support --format html; \
+             supported formats: pdf, text; no output written",
+        ));
 
-    assert!(out.exists(), "output file must exist at {}", out.display());
-    let size = std::fs::metadata(&out).expect("stat").len();
-    assert!(
-        size > 0,
-        "HTML output should be non-empty, was {size} bytes"
-    );
+    assert!(!out.exists(), "no output file may be written");
+}
+
+/// Given a local `.typ` theme built only from `html.*` elements, which
+/// cannot declare its formats, when I render it to PDF or text, then
+/// render exits 2 reporting the document has no text and writes
+/// nothing — instead of a blank PDF or an empty text file (issue #289).
+#[test]
+fn render_local_theme_with_no_text_is_an_error() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let theme = tmp.path().join("html-only.typ");
+    std::fs::write(
+        &theme,
+        "#let data = json(\"/resume.json\")\n\
+         #html.elem(\"p\")[#data.basics.name]\n",
+    )
+    .expect("write theme");
+
+    for format in ["pdf", "text"] {
+        let out = tmp.path().join(format!("out.{format}"));
+        ferrocv()
+            .arg("render")
+            .arg(fixture("render_full"))
+            .arg("--theme")
+            .arg(&theme)
+            .arg("--format")
+            .arg(format)
+            .arg("--output")
+            .arg(&out)
+            .assert()
+            .code(2)
+            .stderr(predicate::str::contains(
+                "error: the rendered document contains no text",
+            ));
+        assert!(
+            !out.exists(),
+            "--format {format}: no output file may be written"
+        );
+    }
+}
+
+/// Given a schema-valid but empty resume (`{}` — JSON Resume requires
+/// no fields), when I render it with a bundled paged theme that prints
+/// nothing for it, then render exits 2 rather than writing a blank PDF
+/// or empty text file (issue #289). This pins the decision deliberately.
+#[test]
+fn render_empty_resume_is_an_error() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let input = tmp.path().join("empty.json");
+    std::fs::write(&input, "{}").expect("write input");
+
+    for format in ["pdf", "text"] {
+        let out = tmp.path().join(format!("out.{format}"));
+        ferrocv()
+            .arg("render")
+            .arg(&input)
+            .arg("--theme")
+            .arg("classic")
+            .arg("--format")
+            .arg(format)
+            .arg("--output")
+            .arg(&out)
+            .assert()
+            .code(2)
+            .stderr(predicate::str::contains(
+                "error: the rendered document contains no text",
+            ));
+        assert!(
+            !out.exists(),
+            "--format {format}: no output file may be written"
+        );
+    }
 }
 
 /// Native HTML happy-path: `html-minimal` (added in #64) is the

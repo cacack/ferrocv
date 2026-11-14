@@ -269,6 +269,9 @@ additions in `src/theme.rs`:
            ),
        ],
        entrypoint: concat!("/themes/my-theme", "/resume.typ"),
+       // Upstream templates are page layouts; Typst's HTML export drops
+       // their headers, so adapters declare pdf and text only.
+       formats: PAGED,
    };
    ```
 

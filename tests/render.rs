@@ -16,7 +16,7 @@
 //! 4. Package fetch is rejected — proves no network resolver is wired
 //!    up. This test is the in-code enforcement of CONSTITUTION §6.1.
 
-use ferrocv::{RenderError, Theme, compile_html, compile_pdf};
+use ferrocv::{Format, RenderError, Theme, compile_html, compile_pdf};
 use serde_json::{Value, json};
 
 /// PDF magic bytes; every valid PDF stream must start with `%PDF-`.
@@ -126,6 +126,7 @@ fn preview_package_import_is_rejected_in_html_compilation() {
         name: "no-network-html-probe",
         files: &[(ENTRY, br#"#import "@preview/cetz:0.2.0": *"# as &[u8])],
         entrypoint: ENTRY,
+        formats: &[Format::Html],
     };
     let err = compile_html(&theme, &Value::Object(Default::default()))
         .expect_err("preview-package import must be rejected in HTML compilation too");

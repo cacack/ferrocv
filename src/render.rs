@@ -261,6 +261,9 @@ impl<T> Rendered<T> {
 ///
 /// Non-fatal Typst warnings are not returned; only errors surface.
 /// Use [`compile_theme_resolved`] to receive them.
+///
+/// A document whose pages carry no text at all is an error rather than
+/// a blank PDF, as for [`compile_theme`].
 pub fn compile_pdf(source: &str, data: &Value) -> Result<Vec<u8>, RenderError> {
     let world = FerrocvWorld::from_single_source(source, data);
     render_world(&world).map(|r| r.output)
@@ -281,7 +284,9 @@ pub fn compile_pdf(source: &str, data: &Value) -> Result<Vec<u8>, RenderError> {
 /// diagnostics describing what the compiler rejected — e.g. a
 /// reference to a field the supplied `data` does not carry, or a
 /// `@preview/...` import that the World refuses to resolve
-/// (CONSTITUTION §6.1).
+/// (CONSTITUTION §6.1). A document whose pages carry no text at all is
+/// also an error rather than a blank PDF (issue #289); the same holds
+/// for [`compile_text`].
 pub fn compile_theme(theme: &Theme, data: &Value) -> Result<Vec<u8>, RenderError> {
     let world = FerrocvWorld::from_theme(theme, data);
     render_world(&world).map(|r| r.output)
@@ -339,7 +344,8 @@ pub fn compile_theme(theme: &Theme, data: &Value) -> Result<Vec<u8>, RenderError
 ///
 /// Returns the same [`RenderError`] type as the PDF path; Typst
 /// compilation diagnostics flow through the shared
-/// `diagnostics_to_error` helper unchanged.
+/// `diagnostics_to_error` helper unchanged. A document whose pages
+/// carry no text at all is an error rather than an empty string.
 pub fn compile_text(theme: &Theme, data: &Value) -> Result<String, RenderError> {
     let world = FerrocvWorld::from_theme(theme, data);
     render_world_to_text(&world).map(|r| r.output)
@@ -431,6 +437,7 @@ pub fn compile_html_resolved(
 fn render_world(world: &FerrocvWorld) -> Result<Rendered<Vec<u8>>, RenderError> {
     let Warned { output, warnings } = typst::compile::<PagedDocument>(world);
     let document = output.map_err(diagnostics_to_error)?;
+    require_text(&extract_text(&document))?;
 
     // Serialize to PDF. `typst_pdf::pdf` can also emit diagnostics
     // (e.g. for unsupported font features) — surface them via the
@@ -450,10 +457,35 @@ fn render_world(world: &FerrocvWorld) -> Result<Rendered<Vec<u8>>, RenderError> 
 fn render_world_to_text(world: &FerrocvWorld) -> Result<Rendered<String>, RenderError> {
     let Warned { output, warnings } = typst::compile::<PagedDocument>(world);
     let document = output.map_err(diagnostics_to_error)?;
+    let output = extract_text(&document);
+    require_text(&output)?;
     Ok(Rendered {
-        output: extract_text(&document),
+        output,
         warnings: to_warnings(&warnings),
     })
+}
+
+/// Reject a paged render whose pages carry no text at all.
+///
+/// A blank PDF or an empty text file is never a useful resume. It means
+/// either the document has nothing this theme displays (JSON Resume
+/// requires no fields, so `{}` is schema-valid) or the theme produced
+/// nothing for this format — e.g. an HTML-only theme (`html.*` elements
+/// are ignored in paged export) rendered to PDF or text. Failing here is
+/// what stops a local `.typ` theme, which cannot declare its formats,
+/// from exiting 0 with an empty document (issue #289).
+fn require_text(extracted: &str) -> Result<(), RenderError> {
+    if extracted.trim().is_empty() {
+        return Err(RenderError {
+            diagnostics: vec![RenderDiagnostic {
+                message: "the rendered document contains no text; either the resume has \
+                          nothing this theme displays, or the theme does not support this \
+                          format (e.g. an HTML-only theme rendered to PDF or text)"
+                    .to_string(),
+            }],
+        });
+    }
+    Ok(())
 }
 
 /// Shared compile + HTML-serialize path used by [`compile_html`].
@@ -1287,12 +1319,31 @@ mod tests {
         // empty string source produces a single blank page. We assert
         // the empty case yields an empty String (no spurious newline)
         // — the contract documented on `normalize_text`.
-        let out = compile_text_from_source("", &Value::Object(Default::default()))
+        let world = FerrocvWorld::from_single_source("", &Value::Object(Default::default()));
+        let document = typst::compile::<PagedDocument>(&world)
+            .output
             .expect("empty source must compile");
+        let out = extract_text(&document);
         assert_eq!(
             out, "",
             "empty document must extract to empty string; got: {out:?}"
         );
+    }
+
+    /// A paged render with no text is an error in both PDF and text, not
+    /// a blank file (issue #289).
+    #[test]
+    fn paged_render_without_text_is_an_error() {
+        let world = FerrocvWorld::from_single_source(
+            "#rect(width: 1cm)",
+            &Value::Object(Default::default()),
+        );
+        for err in [
+            render_world(&world).map(|_| ()).expect_err("PDF"),
+            render_world_to_text(&world).map(|_| ()).expect_err("text"),
+        ] {
+            assert!(err.to_string().contains("contains no text"), "got: {err}");
+        }
     }
 
     #[test]

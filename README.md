@@ -112,6 +112,9 @@ ferrocv render resume.json --format html
 # List bundled themes (machine-readable, one name per line)
 ferrocv themes list
 
+# ...with the output formats each theme supports
+ferrocv themes list --verbose
+
 # Scaffold a starter native theme to author your own
 ferrocv themes new mytheme
 
@@ -209,7 +212,23 @@ for unattended or shared/recorded contexts.
 
 `themes list` prints registered theme names to stdout, one per line,
 sorted lexicographically, with no decoration — a stable
-machine-readable contract.
+machine-readable contract. `themes list --verbose` adds each theme's
+supported formats in a second column:
+
+```
+$ ferrocv themes list --verbose
+basic-resume         pdf, text
+classic              pdf, text
+...
+html-minimal         html
+text-minimal         pdf, text, html
+```
+
+Every bundled theme renders completely in the formats it lists, and
+`render` refuses the others with exit 2 and the supported list rather
+than writing a gutted file: page-layout themes lose their headers in
+Typst's HTML export, and `html-minimal` renders blank pages in PDF and
+text.
 
 `themes new <name>` scaffolds a starter native theme to author your own.
 It writes a new `<name>/` directory (in the current directory, or under
@@ -288,7 +307,9 @@ Exit codes (shared across subcommands):
 - `1` — JSON parsed but failed schema validation (`validate` / `render`;
   diagnostics on stderr)
 - `2` — usage error, IO error, JSON parse error, unknown theme/format,
-  render error, or unrecoverable stdout write failure
+  a theme/format pair the theme does not support, render error
+  (including PDF or text output with no text at all), or
+  unrecoverable stdout write failure
 
 A render that succeeds but may be degraded still exits `0` and prints
 one `warning: <message>` line per Typst warning to stderr (never
