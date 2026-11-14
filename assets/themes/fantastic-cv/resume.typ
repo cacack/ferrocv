@@ -160,13 +160,15 @@
 // surface the JSON Resume `skills` array via `render-custom` as a
 // "Skills" custom section. Each skill entry becomes one highlight
 // where `summary` is the skill name and `description` is the joined
-// keywords. If `skills` is empty or missing, emit nothing.
+// keywords. If `skills` is empty or missing, emit nothing. Joining an
+// empty array yields `none`, which `render-custom` cannot `.len()`, so
+// absent or empty `keywords` become "".
 #if "skills" in r and r.skills != none and r.skills.len() > 0 {
   render-custom((
     title: "Skills",
     highlights: r.skills.map(s => (
       summary: s.at("name", default: ""),
-      description: s.at("keywords", default: ()).join(", "),
+      description: s.at("keywords", default: ()).join(", ", default: ""),
     )),
   ))
 }

@@ -51,9 +51,13 @@
 
 #let get_section_title(section, lang) = section_titles.at(section).at(lang, default: section)
 
+// ferrocv vendor patch (date precision): JSON Resume dates may be `YYYY`,
+// `YYYY-MM` or `YYYY-MM-DD`; upstream assumed a month. A bare year
+// renders as the year alone. See VENDORING.md.
 #let formatDate(dateString, monthNames) = {
   let parts = dateString.split("-")
   let year = parts.at(0)
+  if parts.len() < 2 { return year }
   let month = parts.at(1)
   let monthName = monthNames.at(month, default: month)
   return monthName + " " + year
@@ -230,7 +234,9 @@
       end-date: get_section_title("actual", lang)
     )
   } else if "endDate" in item and not "startDate" in item {
-    formatDate(item.startDate, monthNames)
+    // ferrocv vendor patch: upstream read `item.startDate` here, which
+    // this branch has just established is absent. See VENDORING.md.
+    formatDate(item.endDate, monthNames)
   } else if "startDate" in item and "endDate" in item {
     if item.startDate == item.endDate {
       formatDate(item.startDate, monthNames)
@@ -294,7 +300,9 @@
   generic-two-by-two(
     top-left: strong(education_item.institution),
     top-right: strong(getDegreeDate(lang, education_item)),
-    bottom-left: emph(education_item.studyType + ", " + education_item.area),
+    // ferrocv vendor patch: skip an empty `studyType` or `area` rather
+    // than printing a dangling ", ". See VENDORING.md.
+    bottom-left: emph((education_item.studyType, education_item.area).filter(x => x != "").join(", ", default: "")),
   )
 }
 

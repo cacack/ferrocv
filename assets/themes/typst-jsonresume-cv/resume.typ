@@ -48,11 +48,12 @@
 #let website = basics.at("url", default: none) //Set to none if you want to hide it
 #let githubProfile = none
 #let linkedinProfile = none
+// ferrocv vendor patch (entry-field shim): a profile's `url` is optional.
 #if getProfile(r, "GitHub") != none {
-  githubProfile = getProfile(r, "GitHub").url
+  githubProfile = getProfile(r, "GitHub").at("url", default: none)
 }
 #if getProfile(r, "LinkedIn") != none {
-  linkedinProfile = getProfile(r, "LinkedIn").url
+  linkedinProfile = getProfile(r, "LinkedIn").at("url", default: none)
 }
 
 // Configure visibility of sections
@@ -79,6 +80,21 @@
   ..if website != none {
     ( personal-site: website )
   },
+)
+
+// ferrocv vendor patch (entry-field shim): every field inside a section
+// entry is optional per JSON Resume v1.0.0, but base.typ's section
+// builders read some unconditionally. Merge each entry over defaults
+// (an entry's own value wins) so a missing field renders empty instead
+// of failing the dictionary lookup. See VENDORING.md.
+#let with-defaults(key, defaults) = r.at(key, default: ()).map(e => defaults + e)
+#let r = r + (
+  work: with-defaults("work", (name: "", position: "")),
+  projects: with-defaults("projects", (name: "")),
+  education: with-defaults("education", (institution: "", studyType: "", area: "")),
+  skills: with-defaults("skills", (name: "", keywords: ())),
+  certificates: with-defaults("certificates", (name: "")),
+  interests: with-defaults("interests", (name: "")),
 )
 
 // Section work experience

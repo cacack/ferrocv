@@ -39,9 +39,9 @@ preserved in-tree.
 
 ## Patches applied
 
-Three patches were applied to the upstream theme source to make it
+Four patches were applied to the upstream theme source to make it
 compile under `ferrocv::render::FerrocvWorld` against arbitrary
-schema-valid JSON Resume documents. All three are recorded below with
+schema-valid JSON Resume documents. All four are recorded below with
 before/after snippets.
 
 ### 1. `base.typ`: remove `@preview/scienceicons` import
@@ -183,16 +183,47 @@ section titles apply), missing contact fields produce empty strings
 missing location components collapse (`city, region` → just `city`
 or just `region` or empty).
 
-**What the shim does not address:** fields inside work/education/
-projects/skills entries (`job.name`, `job.position`,
-`education_item.institution`, `education_item.studyType`,
-`education_item.area`, `skill.name`, `skill.keywords`, etc.) are
-still read unconditionally inside `base.typ`'s section builders.
-JSON Resume v1.0.0 treats these as optional, but in practice every
-realistic entry carries them. If a future bug report surfaces a
-schema-valid document that's sparse *inside* an entry, extend the
-shim (or fix it at the ferrocv Rust layer by normalizing the JSON
-before handing it to Typst) at that point.
+Fields *inside* section entries are covered by patch #4.
+
+### 4. Entry-field shim and date precision (issue #291)
+
+**Why:** `base.typ`'s section builders read entry fields
+unconditionally (`job.name`, `job.position`, `proj.name`,
+`education_item.institution`/`studyType`/`area`, `skill.name`,
+`skill.keywords`, `cert.name`, `interest.name`), the glue read a
+profile's `url` unconditionally, and `formatDate` assumed every date
+carries a month. JSON Resume v1.0.0 makes all of those optional and
+accepts `YYYY` dates, so schema-valid documents failed with
+`dictionary does not contain key ...` or `array index out of bounds`.
+The fix lives in the `resume.typ` glue where it can; three spots in
+`base.typ` cannot be fixed from outside and are patched in place.
+
+**`resume.typ` (glue):**
+
+- `getProfile(...).url` → `getProfile(...).at("url", default: none)`.
+- After the profile lookup, `r` is rebound with `work`, `projects`,
+  `education`, `skills`, `certificates`, and `interests` mapped as
+  `defaults + entry`, so a missing name/position/institution/
+  studyType/area renders as `""` and missing `keywords` as `()`. An
+  entry's own values always win; an absent section becomes `()`,
+  which the existing `.len() > 0` guards already skip.
+
+**`base.typ`:**
+
+1. `formatDate` — returns the year alone when the date has no month
+   (`"2020"` → `2020`); `YYYY-MM` and `YYYY-MM-DD` render as before
+   (`Jan 2020`).
+2. `formatDateRange` — the `endDate`-without-`startDate` branch read
+   `item.startDate` (an upstream bug); it now formats `item.endDate`.
+3. `getEduPart` — joins the non-empty values of `studyType` and
+   `area` with `", "` instead of always concatenating, so a missing
+   one does not leave a dangling comma.
+
+**Behavioral impact:** documents with every field present render
+identically (goldens unchanged). Sparse entries render with the
+missing field blank. `tests/optional_fields_cli.rs` renders every
+bundled theme against `render_every_field.json` with each optional
+field dropped in turn and at every date precision.
 
 ## What was NOT patched
 
@@ -200,7 +231,8 @@ before handing it to Typst) at that point.
 - Typst parameter shape (`author`, `location`, `email`, etc.) —
   untouched.
 - Section builders (`work`, `edu`, `projects`,
-  `cumulativeCertSkillsInterests`) — untouched.
+  `cumulativeCertSkillsInterests`) — untouched apart from the
+  `getEduPart` join and the date helpers in patch #4.
 - Multilingual `section_titles` dictionary — untouched.
 
 ## Empty-URL safety audit
@@ -263,8 +295,9 @@ To re-vendor from a newer upstream:
 1. `git clone --depth 1 https://github.com/fruggiero/typst-jsonresume-cv /tmp/typst-jsonresume-cv`
 2. Copy `themes/basic-resume/base.typ` and `themes/basic-resume/resume.typ` over
    the files in this directory.
-3. Re-apply the two patches above. A quick grep for `@preview/` and
-   `../../output/` in the copied files catches both.
+3. Re-apply the patches above. A quick grep for `@preview/` and
+   `../../output/` in the copied files catches #1 and #2; grep for
+   `ferrocv vendor patch` in the old copy to find the rest.
 4. Update the commit SHA and vendor date in this file.
 5. Regenerate goldens and inspect the diff before committing:
 
