@@ -79,6 +79,45 @@
 //! flag, so a default build cannot resolve `@preview/...` specs even
 //! against a populated cache.
 
+/// An output format `ferrocv render` can produce (CONSTITUTION §3).
+///
+/// HTML uses Typst's upstream-experimental HTML export; its output
+/// shape may shift across `ferrocv` releases when Typst is bumped.
+/// Derives [`clap::ValueEnum`] so the CLI's `--format` flag parses
+/// straight into it — one definition of the format set, not two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum Format {
+    /// PDF via `typst-pdf`.
+    Pdf,
+    /// Plain text via the frame-walk extractor.
+    Text,
+    /// HTML via `typst-html` (upstream-experimental).
+    Html,
+}
+
+impl Format {
+    /// The `--format` value for this format: `pdf`, `text`, or `html`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Format::Pdf => "pdf",
+            Format::Text => "text",
+            Format::Html => "html",
+        }
+    }
+}
+
+impl std::fmt::Display for Format {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Formats a theme laid out for paged output supports: PDF and the text
+/// extracted from the same pages. Typst's HTML export drops `align`,
+/// `grid`, `pad` and friends, so paged themes lose their headers there
+/// (issue #289).
+const PAGED: &[Format] = &[Format::Pdf, Format::Text];
+
 /// A themed Typst source bundle that [`crate::render::compile_theme`]
 /// can compile against a JSON Resume document.
 ///
@@ -87,7 +126,9 @@
 /// Typst source files the theme needs, each keyed by the virtual
 /// path it will resolve under inside [`crate::render::FerrocvWorld`].
 /// `entrypoint` is the virtual path of the file `typst::compile`
-/// starts from.
+/// starts from. `formats` lists the output formats the theme produces
+/// complete output for; `render` rejects any other format up front
+/// rather than writing a silently gutted document (issue #289).
 ///
 /// All fields are `'static` because themes are defined as `const`s
 /// and their contents come from [`include_bytes!`].
@@ -102,6 +143,15 @@ pub struct Theme {
     /// Virtual path of the file `typst::compile` starts from. MUST
     /// appear as a key in [`Self::files`].
     pub entrypoint: &'static str,
+    /// Output formats this theme renders completely. Must be non-empty.
+    pub formats: &'static [Format],
+}
+
+impl Theme {
+    /// Whether this theme renders complete output in `format`.
+    pub fn supports(&self, format: Format) -> bool {
+        self.formats.contains(&format)
+    }
 }
 
 /// Virtual-path prefix for this theme's files inside the World.
@@ -156,6 +206,7 @@ pub const TYPST_JSONRESUME_CV: Theme = Theme {
         ),
     ],
     entrypoint: concat!("/themes/typst-jsonresume-cv", "/resume.typ"),
+    formats: PAGED,
 };
 
 // Compile-time sanity check: the entrypoint matches the prefix we
@@ -194,6 +245,7 @@ pub const FANTASTIC_CV: Theme = Theme {
         ),
     ],
     entrypoint: concat!("/themes/fantastic-cv", "/resume.typ"),
+    formats: PAGED,
 };
 
 // Compile-time sanity check: same shape as for TYPST_JSONRESUME_CV.
@@ -228,6 +280,7 @@ pub const MODERN_CV: Theme = Theme {
         ),
     ],
     entrypoint: concat!("/themes/modern-cv", "/resume.typ"),
+    formats: PAGED,
 };
 
 // Compile-time sanity check: same shape as for TYPST_JSONRESUME_CV.
@@ -261,6 +314,7 @@ pub const BASIC_RESUME: Theme = Theme {
         ),
     ],
     entrypoint: concat!("/themes/basic-resume", "/resume.typ"),
+    formats: PAGED,
 };
 
 // Compile-time sanity check: same shape as for TYPST_JSONRESUME_CV.
@@ -362,6 +416,7 @@ pub const TEXT_MINIMAL: Theme = Theme {
         ),
     ],
     entrypoint: TEXT_MINIMAL_RESUME_PATH,
+    formats: &[Format::Pdf, Format::Text, Format::Html],
 };
 
 /// Virtual path of the `html-minimal` theme's entrypoint.
@@ -402,6 +457,7 @@ pub const HTML_MINIMAL: Theme = Theme {
         ),
     ],
     entrypoint: HTML_MINIMAL_RESUME_PATH,
+    formats: &[Format::Html],
 };
 
 /// Virtual path of the `classic` theme's entrypoint.
@@ -449,6 +505,7 @@ pub const CLASSIC: Theme = Theme {
         ),
     ],
     entrypoint: CLASSIC_RESUME_PATH,
+    formats: PAGED,
 };
 
 /// All themes registered with this build of `ferrocv`.
@@ -561,6 +618,17 @@ impl ResolvedTheme {
         match self {
             ResolvedTheme::Bundled(t) => t.entrypoint,
             ResolvedTheme::Owned(o) => &o.entrypoint,
+        }
+    }
+
+    /// Output formats the theme declares it renders completely, or
+    /// `None` when it cannot declare any: a local `.typ` file or an
+    /// installed `@preview/...` package carries no such metadata, so
+    /// only the post-render empty-output check guards it.
+    pub fn formats(&self) -> Option<&'static [Format]> {
+        match self {
+            ResolvedTheme::Bundled(t) => Some(t.formats),
+            ResolvedTheme::Owned(_) => None,
         }
     }
 
@@ -928,6 +996,19 @@ fn resolve_local_path(spec: &str) -> Result<ResolvedTheme, ThemeResolveError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every bundled theme declares at least one format, or `render`
+    /// could never use it.
+    #[test]
+    fn every_bundled_theme_declares_a_format() {
+        for theme in THEMES {
+            assert!(
+                !theme.formats.is_empty(),
+                "theme `{}` must declare at least one supported format",
+                theme.name,
+            );
+        }
+    }
 
     /// Unit coverage for the bundled-vs-local-vs-preview detection
     /// heuristic. Uses only pure-string classification (no IO) except

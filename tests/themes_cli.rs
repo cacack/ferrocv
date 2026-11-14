@@ -29,3 +29,26 @@ fn themes_list_prints_sorted_names() {
         ))
         .stderr(predicate::str::is_empty());
 }
+
+/// `--verbose` adds each theme's supported formats as a second, aligned
+/// column, so a user can see which formats a theme renders before
+/// `render` rejects a pair (issue #289). Plain `list` stays names-only.
+#[test]
+fn themes_list_verbose_shows_supported_formats() {
+    ferrocv()
+        .arg("themes")
+        .arg("list")
+        .arg("--verbose")
+        .assert()
+        .success()
+        .stdout(predicate::eq(concat!(
+            "basic-resume         pdf, text\n",
+            "classic              pdf, text\n",
+            "fantastic-cv         pdf, text\n",
+            "html-minimal         html\n",
+            "modern-cv            pdf, text\n",
+            "text-minimal         pdf, text, html\n",
+            "typst-jsonresume-cv  pdf, text\n",
+        )))
+        .stderr(predicate::str::is_empty());
+}

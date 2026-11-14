@@ -12,8 +12,8 @@
 //!   - `tailor`: derived JSON Resume written to `--output`/stdout
 //! - `1` — document parsed as JSON but failed schema validation
 //! - `2` — usage error (incl. malformed projection flag value), IO
-//!   error, malformed JSON, unknown theme, unknown format, or Typst
-//!   render error
+//!   error, malformed JSON, unknown theme, unknown format, a format the
+//!   theme does not support, or Typst render error
 
 use std::collections::BTreeMap;
 use std::io::{self, Write};
@@ -25,9 +25,9 @@ use clap::{Args, Parser, Subcommand};
 use serde_json::Value;
 
 use crate::{
-    BulletSection, ProjectionError, ProjectionSpec, RedactSet, Rendered, THEMES, ThemeResolveError,
-    ValidationError, compile_html_resolved, compile_text_resolved, compile_theme_resolved, project,
-    resolve_theme, validate_value,
+    BulletSection, Format, ProjectionError, ProjectionSpec, RedactSet, Rendered, THEMES, Theme,
+    ThemeResolveError, ValidationError, compile_html_resolved, compile_text_resolved,
+    compile_theme_resolved, project, resolve_theme, validate_value,
 };
 
 /// Render JSON Resume documents via embedded Typst.
@@ -71,8 +71,10 @@ enum Commands {
     /// Exit codes:
     /// - 0 — rendered successfully; output written to --output
     /// - 1 — JSON parsed but failed schema validation
-    /// - 2 — usage error, IO error, parse error, unknown theme, or
-    ///   render error
+    /// - 2 — usage error, IO error, parse error, unknown theme, a
+    ///   format the theme does not support (see `themes list
+    ///   --verbose`), or render error (including PDF or text output
+    ///   with no text)
     Render {
         /// Path to a JSON Resume document. Reads stdin if omitted.
         path: Option<PathBuf>,
@@ -85,8 +87,10 @@ enum Commands {
         #[arg(long)]
         theme: Option<String>,
         /// Output format: `pdf`, `text`, or `html`. Defaults to `pdf`.
-        /// HTML output is experimental upstream; its shape may shift
-        /// when Typst is bumped.
+        /// A bundled theme renders only the formats `themes list
+        /// --verbose` shows for it; others exit 2. HTML output is
+        /// experimental upstream; its shape may shift when Typst is
+        /// bumped.
         #[arg(long, default_value = "pdf")]
         format: Format,
         /// Output file path. Parent directories are created as needed.
@@ -165,7 +169,12 @@ enum Commands {
 #[derive(Debug, Subcommand)]
 enum ThemesCommands {
     /// List registered theme names, one per line, sorted.
-    List,
+    List {
+        /// Also show each theme's supported output formats, as
+        /// `<name>  <format>, <format>` lines.
+        #[arg(short, long)]
+        verbose: bool,
+    },
     /// Scaffold a starter native theme wired to the shared prelude.
     ///
     /// Writes a new directory `<name>/` (under the current directory,
@@ -246,18 +255,6 @@ enum ThemesCommands {
         /// `@preview/<name>:<version>` spec of the package to install.
         spec: String,
     },
-}
-
-/// Output formats supported by `ferrocv render`.
-///
-/// Phase 2 ships PDF, plain text, and HTML. HTML uses Typst's
-/// upstream-experimental HTML export; its output shape may shift
-/// across `ferrocv` releases when Typst is bumped.
-#[derive(Debug, Clone, Copy, clap::ValueEnum)]
-enum Format {
-    Pdf,
-    Text,
-    Html,
 }
 
 /// Shared mechanical projection flags (issue #148), attached to both
@@ -470,7 +467,7 @@ pub fn run() -> Result<ExitCode> {
             Err(msg) => usage_error(&msg),
         },
         Commands::Themes { command } => match command {
-            ThemesCommands::List => run_themes_list(),
+            ThemesCommands::List { verbose } => run_themes_list(verbose),
             ThemesCommands::New { name, out } => run_themes_new(&name, out.as_deref()),
             #[cfg(feature = "install")]
             ThemesCommands::Install { spec } => run_themes_install(&spec),
@@ -621,27 +618,45 @@ fn run_themes_install(spec: &str) -> Result<ExitCode> {
 ///
 /// This is the machine-readable contract: no headers, no decoration,
 /// no extra whitespace. Shell pipelines depend on stability here.
+/// `--verbose` is for people: it appends each theme's supported
+/// formats after the name, aligned in a second column.
 ///
 /// Writes go through a locked `stdout` handle with explicit error
 /// handling rather than `println!` — a broken pipe (e.g.
 /// `ferrocv themes list | head`) is a normal IO error here, not a
 /// panic. Per the module-level exit-code contract, unrecoverable
 /// stdout write failures exit with code 2.
-fn run_themes_list() -> Result<ExitCode> {
-    let mut names: Vec<&'static str> = THEMES.iter().map(|t| t.name).collect();
+fn run_themes_list(verbose: bool) -> Result<ExitCode> {
+    let mut themes: Vec<&'static Theme> = THEMES.to_vec();
     // `sort_unstable` is fine — theme names are unique, so stability
     // on equal keys is moot.
-    names.sort_unstable();
+    themes.sort_unstable_by_key(|t| t.name);
+    let width = themes.iter().map(|t| t.name.len()).max().unwrap_or(0);
 
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
-    for name in names {
-        if let Err(err) = writeln!(stdout, "{name}") {
+    for theme in themes {
+        let line = if verbose {
+            format!("{:<width$}  {}", theme.name, join_formats(theme.formats))
+        } else {
+            theme.name.to_string()
+        };
+        if let Err(err) = writeln!(stdout, "{line}") {
             eprintln!("error: failed to write theme list to stdout: {err}");
             return Ok(ExitCode::from(2));
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Comma-separated `--format` values, e.g. `pdf, text`, for the
+/// `themes list --verbose` column and the unsupported-format error.
+fn join_formats(formats: &[Format]) -> String {
+    formats
+        .iter()
+        .map(|f| f.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 // --- `themes new` scaffold -------------------------------------------
@@ -917,6 +932,24 @@ fn run_render(
             return Ok(ExitCode::from(2));
         }
     };
+
+    // Step 5b: refuse a format the theme cannot render completely. A
+    // paged theme loses its headers in HTML and an HTML theme renders
+    // blank pages, both while "succeeding" — so a bundled theme that
+    // does not declare the format is a usage error, before any compile
+    // (issue #289). Local and `@preview/...` themes declare nothing;
+    // the empty-output check in the render pipeline guards them.
+    if let Some(formats) = theme.formats()
+        && !formats.contains(&format)
+    {
+        eprintln!(
+            "error: theme `{}` does not support --format {format}; supported formats: {}; \
+             no output written",
+            theme.name(),
+            join_formats(formats),
+        );
+        return Ok(ExitCode::from(2));
+    }
 
     // Step 6: format dispatch. PDF returns bytes; text and HTML both
     // return a String which we convert to UTF-8 bytes for the shared

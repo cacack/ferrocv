@@ -229,10 +229,17 @@ the same golden harness the adapters use. Two steps:
            ),
        ],
        entrypoint: MY_THEME_RESUME_PATH,
+       // Formats the theme renders *completely*; `render` rejects the
+       // rest with exit 2. `PAGED` (pdf, text) for page layouts,
+       // `&[Format::Html]` for `html.*` themes.
+       formats: PAGED,
    };
    ```
 
-   Then append `&MY_THEME` to the `THEMES` slice.
+   Then append `&MY_THEME` to the `THEMES` slice. The render matrix test
+   (`render_every_theme_format_pair_is_complete_or_rejected` in
+   `tests/render_cli.rs`) then checks every declared format really
+   contains the fixture's name and work entries.
 
 2. **Add golden tests** in the test file that matches your output
    format:
@@ -283,6 +290,11 @@ that's *why* the prelude ships data access only:
 If you want one theme to serve multiple formats well, expect to branch
 layout per format; the data-reading via the prelude is the only part
 that stays identical.
+
+A local `.typ` theme cannot declare which formats it supports, so
+`render` cannot refuse a mismatched pair up front. It still fails
+loudly: PDF or text output with no text at all exits 2, and content the
+format drops (e.g. `align` or `grid` in HTML) prints a `warning:` line.
 
 ## Once it lands
 
