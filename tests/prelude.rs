@@ -53,7 +53,9 @@ fn render_with_prelude(body: &str, data: &serde_json::Value) -> String {
         entrypoint: ENTRY_VPATH.to_owned(),
     });
 
-    compile_text_resolved(&theme, data).expect("prelude-test theme must compile to text")
+    compile_text_resolved(&theme, data)
+        .expect("prelude-test theme must compile to text")
+        .output
 }
 
 /// The four helpers behave as documented: `nz` collapses empty/none,

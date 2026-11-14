@@ -273,7 +273,8 @@ that's *why* the prelude ships data access only:
 - **PDF** — rich layout (grids, rules, fonts). `classic` is the
   reference. Use only bundled fonts (`Libertinus Serif`, etc.); there
   is no system-font scan, so a non-bundled family renders
-  non-deterministically across hosts (CONSTITUTION §6).
+  non-deterministically across hosts (CONSTITUTION §6); `render`
+  prints `warning: unknown font family: ...` when a theme asks for one.
 - **text** — frame-walked plain text. `text-minimal` is single-column
   and bullet-free because the extractor flattens layout.
 - **HTML** — Typst's typed-HTML API. `html-minimal` emits semantic
