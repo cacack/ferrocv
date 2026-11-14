@@ -520,16 +520,19 @@ fn render_world_to_html(world: &FerrocvWorld) -> Result<Rendered<String>, Render
 const LINE_TOLERANCE_EM: f64 = 0.3;
 
 /// Minimum baseline-to-baseline distance between consecutive lines,
-/// as a fraction of the lower line's font size, that inserts a blank
-/// line (paragraph break) into the output.
+/// as a fraction of the smaller of the two lines' font sizes, that
+/// inserts a blank line (paragraph break) into the output.
 ///
-/// The lower line's size is the reference because its ascent is what
-/// a baseline gap mostly measures; a large name above a body-size
-/// line would otherwise mask the paragraph break beneath it.
+/// The smaller size is the reference so a large line on either side
+/// cannot mask a break: a big name above body text, or a section
+/// heading below the previous section's last bullet (`modern-cv`),
+/// would otherwise inflate the threshold past the real gap.
 /// Measured across the shipped themes: wrapped and
 /// `linebreak()`-separated lines sit 1.2–1.45em apart, while the
 /// spacing between entries and sections puts them 1.58em (`classic`)
-/// or more apart. 1.5em splits the two.
+/// or more apart. 1.5em splits the two with a narrow margin, tuned
+/// only against the shipped themes; moving it changes the
+/// `classic-text*` and `text-minimal*` goldens in `tests/goldens/`.
 const PARAGRAPH_GAP_EM: f64 = 1.5;
 
 /// Minimum horizontal gap between two runs on one line, as a fraction
@@ -561,8 +564,9 @@ struct TextItemPosition {
     text: String,
 }
 
-/// One visual line: its first run's baseline, its largest font size,
-/// and its runs joined in reading order.
+/// One visual line: its first run's baseline (the anchor run, first
+/// by y, not by x), its largest run's font size, and its runs joined
+/// in reading order.
 struct Line {
     y_pt: f64,
     size_pt: f64,
@@ -703,14 +707,14 @@ fn join_line(mut runs: Vec<TextItemPosition>) -> Line {
 
 /// Join lines into a single string, inserting a blank line between
 /// consecutive lines whose baseline gap exceeds [`PARAGRAPH_GAP_EM`]
-/// of the lower line's font size.
+/// of the smaller of the two lines' font sizes.
 fn join_lines_with_paragraph_breaks(lines: &[Line]) -> String {
     let mut out = String::new();
     let mut prev: Option<&Line> = None;
     for line in lines {
         if let Some(prev) = prev {
             let gap = line.y_pt - prev.y_pt;
-            if gap > PARAGRAPH_GAP_EM * line.size_pt {
+            if gap > PARAGRAPH_GAP_EM * line.size_pt.min(prev.size_pt) {
                 out.push_str("\n\n");
             } else {
                 out.push('\n');

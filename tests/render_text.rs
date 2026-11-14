@@ -13,6 +13,8 @@
 //!   `classic` is PDF-first, so its `tests/render_theme.rs` golden
 //!   goes through `pdf-extract`; the `classic-text*.txt` goldens here
 //!   pin what `render --format text --theme classic` actually emits.
+//!   `modern-cv-text.txt` does the same for one adapter whose large
+//!   section headings stress the paragraph-break heuristic.
 //! - **§4** — no mocking Typst. Runs the real embedded compiler.
 //!
 //! Mirrors the structure of `tests/render_theme.rs`; the small
@@ -83,6 +85,19 @@ fn classic_renders_grace_hopper_sparse_to_expected_text() {
         "tests/fixtures/render_sparse.json",
         "tests/goldens/classic-text-sparse.txt",
         "Grace Hopper",
+    );
+}
+
+/// `modern-cv` is an adapter, but its large level-1 headings are what
+/// exposed the paragraph-gap reference size: this golden pins the
+/// blank line before each section heading.
+#[test]
+fn modern_cv_renders_ada_lovelace_to_expected_text() {
+    run_golden(
+        "modern-cv",
+        "tests/fixtures/render_full.json",
+        "tests/goldens/modern-cv-text.txt",
+        "Ada Lovelace",
     );
 }
 
