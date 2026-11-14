@@ -210,3 +210,48 @@ fn typst_jsonresume_cv_formats_each_date_precision() {
         );
     }
 }
+
+/// Render `doc` through the named theme and return its extracted text
+/// with whitespace collapsed to single spaces.
+fn render_text(theme: &str, doc: &Value) -> String {
+    let theme = ferrocv::find_theme(theme).unwrap();
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = render(theme, doc, tmp.path()).unwrap_or_else(|e| panic!("{}: {e}", theme.name));
+    let text = pdf_extract::extract_text_from_mem(&std::fs::read(out).unwrap()).unwrap();
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Given an education entry missing `studyType` or `area`, when I
+/// render it through `typst-jsonresume-cv`, then the present field
+/// shows without a dangling ", ".
+#[test]
+fn typst_jsonresume_cv_education_omits_missing_part_without_comma() {
+    for (field, value) in [("studyType", "Mathematics"), ("area", "Mathematics")] {
+        let doc = json!({
+            "basics": {"name": "Ada Lovelace"},
+            "education": [{"institution": "University of London", field: value}],
+        });
+        let text = render_text("typst-jsonresume-cv", &doc);
+        assert!(
+            text.contains(value),
+            "{field}: {value:?} missing in:\n{text}"
+        );
+        assert!(
+            !text.contains(&format!(", {value}")) && !text.contains(&format!("{value},")),
+            "{field}: dangling comma around {value:?} in:\n{text}"
+        );
+    }
+}
+
+/// Given a skill with no `keywords`, when I render it through
+/// `fantastic-cv`, then the skill name still shows.
+#[test]
+fn fantastic_cv_renders_skill_name_without_keywords() {
+    let doc =
+        json!({"basics": {"name": "Ada Lovelace"}, "skills": [{"name": "Analytical Engines"}]});
+    let text = render_text("fantastic-cv", &doc);
+    assert!(
+        text.contains("Analytical Engines"),
+        "skill name missing in:\n{text}"
+    );
+}
