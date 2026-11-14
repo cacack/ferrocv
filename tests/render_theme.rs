@@ -288,9 +288,25 @@ fn visible_text(pdf: &[u8]) -> String {
 /// entry title and the `EDUCATION` heading across the page boundary.
 /// Every highlight is short enough to stay on one line, so the last line
 /// of every non-final page must be a `•` bullet.
+///
+/// The ranges are calibrated to today's page geometry: 11 three-bullet
+/// roles fill page one, and 25 steps of `k` exceed one role's height
+/// (title plus three bullets plus spacing), so the boundary visits every
+/// line of an entry and the Experience-to-Education transition. Because
+/// a geometry change could quietly stop the sweep from reaching those
+/// boundaries, the test also requires that some step opens a page with
+/// `EDUCATION` and some step opens one with an entry title.
 #[test]
 fn classic_page_breaks_never_strand_a_heading() {
     let theme = ferrocv::find_theme("classic").expect("classic must be registered");
+    let first_line = |page: &str| {
+        page.lines()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("")
+            .trim()
+            .to_owned()
+    };
+    let (mut heading_crossed, mut title_crossed) = (false, false);
     for k in 0..=24 {
         let mut work = vec![serde_json::json!({
             "name": "Filler Co",
@@ -320,6 +336,11 @@ fn classic_page_breaks_never_strand_a_heading() {
         let pages = pdf_extract::extract_text_from_mem_by_pages(&bytes)
             .expect("pdf-extract must parse the compiled PDF");
         assert!(pages.len() > 1, "sweep k={k} must span pages");
+        for page in &pages[1..] {
+            let first = first_line(page);
+            heading_crossed |= first.starts_with("EDUCATION");
+            title_crossed |= first.starts_with("Engineer");
+        }
         for (n, page) in pages[..pages.len() - 1].iter().enumerate() {
             let last = page.lines().rfind(|l| !l.trim().is_empty()).unwrap_or("");
             assert!(
@@ -330,6 +351,12 @@ fn classic_page_breaks_never_strand_a_heading() {
             );
         }
     }
+    assert!(
+        heading_crossed && title_crossed,
+        "the sweep no longer walks a heading (crossed: {heading_crossed}) and an \
+         entry title (crossed: {title_crossed}) across the page boundary; \
+         recalibrate its ranges to the current page geometry",
+    );
 }
 
 /// Audience-aware rendering (issue #182, exercising the `ext` accessor
