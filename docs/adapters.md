@@ -115,7 +115,7 @@ to your case before authoring a new one.
 
 | Adapter                                           | Shape                  | Why it's the exemplar                                                                                  |
 | ------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------ |
-| [`fantastic-cv`](../assets/themes/fantastic-cv/)             | Pure glue, light patch | Upstream needed only one compatibility patch (`link("")` guard); everything else is glue in `resume.typ`. |
+| [`fantastic-cv`](../assets/themes/fantastic-cv/)             | Pure glue, light patch | Upstream needed a `link("")` guard and a dangling-separator fix; everything else is glue in `resume.typ`. |
 | [`typst-jsonresume-cv`](../assets/themes/typst-jsonresume-cv/) | Glue + optional-field shim | Upstream read a path the World doesn't serve, plus several dict lookups that crashed on sparse JSON Resume documents. |
 | [`modern-cv`](../assets/themes/modern-cv/)                   | Heavy patch            | Upstream pulled two `@preview/...` packages and read the system clock; required removing both and i18n-flattening to English. |
 | [`basic-resume`](../assets/themes/basic-resume/)             | Single `@preview` strip | Upstream pulled exactly one `@preview/...` package (`scienceicons` for the ORCID glyph); the icon call site rewrote to a plain text label. |
@@ -138,6 +138,17 @@ split is what makes re-vendoring a mechanical operation: you copy the
 new upstream over `<upstream>.typ`, re-apply the documented patches,
 and the glue continues to work as long as the upstream signatures
 didn't change.
+
+## Adapter-specific input
+
+Adapters read the JSON Resume schema (CONSTITUTION §1). One exception
+is inherited from upstream and kept as-is:
+
+- **`typst-jsonresume-cv` reads `meta.language`**, which is not a JSON
+  Resume v1.0.0 field. `"de"` and `"it"` switch its section titles and
+  month names to German or Italian; any other value, or none, renders
+  English. The value is also passed to Typst's `text(lang: ...)`, so
+  it should be an ISO 639 code. No other theme reads it.
 
 ## Step-by-step: adding a new adapter
 
@@ -362,6 +373,12 @@ often they bite:
   `date: datetime.today().display(...)` crash on first call. Replace
   with `date: ""` and let the glue pass an explicit value (or accept
   a blank slot).
+- **Link targets must be the source URL.** Many upstream templates
+  prepend `https://` (or a fixed host) to a value they expect to be
+  scheme-less, so a full JSON Resume URL becomes
+  `https://https://...` or an `http://` URL is rewritten.
+  `tests/adapter_mapping.rs` asserts every link annotation is a source
+  URL, `mailto:`, or `tel:`; add a new adapter to its `ADAPTERS` list.
 - **System fonts are not available.** `ferrocv` ships fonts via the
   `typst-assets` crate (DejaVu Sans Mono, Libertinus Serif, New
   Computer Modern, etc.) — there is no system-font scan. If upstream

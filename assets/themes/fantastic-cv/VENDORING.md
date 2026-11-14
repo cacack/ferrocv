@@ -58,7 +58,11 @@ Upstream LICENSE for reference:
 
 ## Patches applied
 
-**One compatibility patch**: every `link(x.url)` call in
+Two patches: an empty-URL guard and an output fix.
+
+### 1. Empty-URL guard
+
+Every `link(x.url)` call in
 `fantastic-cv.typ` was restructured to guard the empty-URL case *before*
 `link()` is called, rather than upstream's "call `link()` then maybe
 rebind" pattern.
@@ -93,6 +97,27 @@ The patch is minimal, preserves upstream's intent exactly, and is
 forward-compatible with any future upstream fix (if upstream adopts
 the same restructure, re-vendoring becomes a byte-for-byte copy again).
 
+### 2. Link targets and dangling separators (issue #293)
+
+Upstream printed separators and labels whether or not the data behind
+them existed, and linked the email without a scheme. Four spots in
+`fantastic-cv.typ` are patched, each marked `ferrocv vendor patch`:
+
+- `_format_dates` — an absent `endDate` reads `Present`; an absent
+  `startDate` shows `endDate` alone (or nothing) instead of `start —`
+  / a bare `—`.
+- `render-basic-info` — the email links to `mailto:<email>`, and the
+  profiles join the same item list as phone/email/url, filtering empty
+  items, so a header without profiles has no trailing `|`.
+- `render-education` — `studyType`, `area`, and `GPA: <score>` join
+  only when present; the `Selected coursework` bullet renders only
+  when `courses` is non-empty.
+- `render-work` — `position` and `description` join only when present.
+
+Pinned by the goldens and `tests/adapter_mapping.rs`.
+
+### Glue
+
 All other JSON-Resume → fantastic-cv field mapping and the
 optional-field shim live in the adjacent `resume.typ` glue entrypoint,
 as before.
@@ -112,7 +137,7 @@ The following are deliberately upstream-as-is:
   `render-custom`).
 - The `config` show-rule body (font/page/heading styles).
 - All `render-*` builder bodies — entry layout, `_section` helper,
-  `_format_dates` and `_entry_heading` internals.
+  `_entry_heading` internals — apart from patch 2.
 - Default font ("New Computer Modern"), default font size (10pt),
   default paper ("a4"), default margins (0.5in all sides), and
   default accent color (`#26428b`).
@@ -151,8 +176,8 @@ To re-vendor from a newer upstream:
    (e.g., `curl -O
    https://raw.githubusercontent.com/austinyu/fantastic-cv/<SHA>/src/fantastic-cv.typ`).
 2. Copy it over the file in this directory, overwriting byte-for-byte.
-3. **Re-apply the empty-URL-guard patch** documented under "Patches
-   applied" above. `grep -n "link(" fantastic-cv.typ` enumerates the
+3. **Re-apply both patches** documented under "Patches applied" above
+   (`grep -n "ferrocv vendor patch"` in the old copy finds patch 2). `grep -n "link(" fantastic-cv.typ` enumerates the
    call sites; each must be guarded as shown. If upstream has adopted
    the same restructure, the grep result will already match the
    patched shape and this step is a no-op.

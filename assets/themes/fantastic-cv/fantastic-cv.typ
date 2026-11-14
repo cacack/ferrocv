@@ -55,11 +55,15 @@
 }
 
 
+// ferrocv vendor patch (dangling separators): upstream always printed
+// `start — end`, leaving `2020-03-01 —` for an ongoing role and a bare
+// `—` for an undated entry. See VENDORING.md.
 #let _format_dates(
   start-date: "",
   end-date: "",
 ) = {
-  start-date + " " + $dash.em$ + " " + end-date
+  if start-date == "" { end-date }
+  else { start-date + " " + $dash.em$ + " " + if end-date == "" { "Present" } else { end-date } }
 }
 
 
@@ -110,19 +114,18 @@
     top: 0.25em,
     [
       #{
+        // ferrocv vendor patch (link targets, dangling separators): the
+        // email link targets `mailto:`, and profiles join the same item
+        // list so an absent field leaves no stray `|`. See VENDORING.md.
         let items = (
           phone,
-          if email.len() == 0 { none } else { link(email)[#email] },
+          if email.len() == 0 { none } else { link("mailto:" + email)[#email] },
           if url.len() == 0 { none } else { link(url)[#url] },
-        )
-        items.filter(x => x != none).join("  |  ")
-        "  |  "
-        profiles
-          .map(profile => {
+        ) + profiles.map(profile => {
             profile.network + ": "
             if profile.url.len() == 0 { profile.username } else { link(profile.url)[#profile.username] }
           })
-          .join("  |  ")
+        items.filter(x => x != none and x != "").join("  |  ")
       }
     ],
   )
@@ -139,14 +142,17 @@
         _entry_heading(
           main: main,
           dates: _format_dates(start-date: education.startDate, end-date: education.endDate),
+          // ferrocv vendor patch (dangling separators): skip absent
+          // parts instead of printing `GPA:` and an empty coursework
+          // bullet. See VENDORING.md.
           description: (
-            emph(education.studyType),
-            education.area,
-            "GPA: " + strong(education.score),
-          ).join(" | "),
+            if education.studyType.len() > 0 { emph(education.studyType) },
+            if education.area.len() > 0 { education.area },
+            if education.score.len() > 0 { "GPA: " + strong(education.score) },
+          ).filter(x => x != none).join(" | "),
           bottom_right: education.location,
         )
-        [
+        if education.courses.len() > 0 [
           - #emph[Selected coursework]: #education.courses.join(", ")
         ]
       })
@@ -167,10 +173,12 @@
           #_entry_heading(
             main: main,
             dates: _format_dates(start-date: work.startDate, end-date: work.endDate),
+            // ferrocv vendor patch (dangling separators): skip an absent
+            // position or description. See VENDORING.md.
             description: (
-              emph(work.position),
-              work.description,
-            ).join(" | "),
+              if work.position.len() > 0 { emph(work.position) },
+              if work.description.len() > 0 { work.description },
+            ).filter(x => x != none).join(" | "),
             bottom_right: work.location,
           )
           #work.highlights.map(it => [- #it]).join(v(render_space_between_highlight))

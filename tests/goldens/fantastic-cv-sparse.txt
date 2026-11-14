@@ -1,9 +1,7 @@
 Grace Hopper
 
-  |
 Work
-US Navy 1944-07-01  —
+US Navy 1944-07-01  —  Present
 
-Rear Admiral  |
-• Worked on the Mark I computer at Harvard.
+Rear Admiral • Worked on the Mark I computer at Harvard.
 • Developed the first compiler for a computer programming language.

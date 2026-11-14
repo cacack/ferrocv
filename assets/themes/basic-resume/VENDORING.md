@@ -87,6 +87,24 @@ If upstream drops the `@preview/scienceicons` dependency in a later
 release (e.g. by inlining an SVG or removing the icon entirely), the
 re-vendor becomes a byte-for-byte copy and this patch can be retired.
 
+**One link-target patch** (issue #293): upstream builds every URL link
+as `"https://" + value` (`contact-item(..., link-type: "https://")`
+and the `project`/`certificates` helpers), so an `http://` URL was
+rewritten to `https://`. A `__href(scheme, value)` helper now prepends
+the scheme only when `value` does not already contain `://`, and every
+such call site goes through it:
+
+```typst
+// after patching
+#let __href(scheme, value) = if value.contains("://") { value } else { scheme + value }
+link(__href(link-type, value))[#(prefix + value)]   // contact-item
+link(__href("https://", url))[#url]                  // project, certificates
+```
+
+Scheme-less values link exactly as before; a value with a scheme links
+to itself. Every link annotation in the PDF is now the source URL (or
+`mailto:<email>`), pinned by `tests/adapter_mapping.rs`.
+
 ## Empty-URL safety audit
 
 Per the [shared checklist](../VENDORING_CHECKLIST.md) §2, every
@@ -95,11 +113,11 @@ Per the [shared checklist](../VENDORING_CHECKLIST.md) §2, every
 
 | Line | Call                                  | Guarded by                                  |
 | ---- | ------------------------------------- | ------------------------------------------- |
-| 83   | `link(link-type + value)`             | `if value != ""` in `contact-item` (L81)    |
-| 202  | `link("https://" + url)`              | `if url != "" and dates != ""`              |
-| 204  | `link("https://" + url)`              | `if url != "" and dates != ""`              |
-| 209  | `link("https://" + url)`              | `if dates == "" and url != ""`              |
-| 226  | `link("https://" + url)`              | `if url != ""` in `certificates`            |
+| 89   | `link(__href(link-type, value))`      | `if value != ""` in `contact-item` (L87)    |
+| 208  | `link(__href("https://", url))`       | `if url != "" and dates != ""`              |
+| 210  | `link(__href("https://", url))`       | `if url != "" and dates != ""`              |
+| 215  | `link(__href("https://", url))`       | `if dates == "" and url != ""`              |
+| 232  | `link(__href("https://", url))`       | `if url != ""` in `certificates`            |
 
 All five sites are guarded; no empty-URL patch is required. The
 sparse-fixture regression test
@@ -135,14 +153,18 @@ touching `basic-resume.typ`:
 
 - **No `profiles` argument:** basic-resume's show rule takes `github`,
   `linkedin`, `personal-site`, and `orcid` as flat string arguments
-  (each gets `https://` prepended by `contact-item`). The glue
-  case-insensitively matches `basics.profiles[].network` against
-  `"GitHub"`, `"LinkedIn"`, etc. and strips any leading `https?://` so
-  the helper's prepend doesn't double up. Profiles for networks
+  (`contact-item` prepends `https://` to a scheme-less value). The
+  glue case-insensitively matches `basics.profiles[].network` against
+  `"GitHub"`, `"LinkedIn"`, etc. and strips a leading `https://` for
+  display; the link target is still the source URL. Any other scheme
+  (`http://`) is kept and linked as-is by the patched helper. Profiles for networks
   basic-resume doesn't have a slot for (Mastodon, GitLab, etc.) are
   dropped in v1.
-- **`personal-site`** comes from JSON Resume `basics.url` with the
-  scheme stripped (same prepend rule).
+- **`personal-site`** comes from JSON Resume `basics.url` with a
+  leading `https://` stripped (same rule).
+- **`education[].score`** renders as a `GPA: <score>` bullet under the
+  entry, next to the `Courses:` bullet. Upstream `edu()` accepts a
+  `gpa` argument but never prints it, so the glue does not pass it.
 - **`work[]` field renames:** JSON Resume `position` →
   basic-resume `title`; JSON Resume `name` → basic-resume `company`.
 - **Sections without a basic-resume helper** — `volunteer`, `awards`,

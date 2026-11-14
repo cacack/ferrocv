@@ -19,14 +19,13 @@
 // "/resume.json". Same convention as every other ferrocv theme.
 #let r = json("/resume.json")
 
-// Strip a leading `https://` or `http://` from a URL so it slots into
-// basic-resume's helpers, which prepend `https://` themselves (see
-// `contact-item(..., link-type: "https://")` and the `project`/
-// `certificates` helpers in the upstream source). Returns the input
-// untouched if no scheme is present.
+// Strip a leading `https://` from a URL for display: basic-resume's
+// helpers prepend `https://` to a scheme-less value to build the link
+// target, so the target stays the source URL. Any other scheme (e.g.
+// `http://`) is kept, and the patched helpers link it as-is rather
+// than rewriting it to `https://` (see VENDORING.md → Patches applied).
 #let __strip_scheme(u) = {
   if u.starts-with("https://") { u.slice(8) }
-  else if u.starts-with("http://") { u.slice(7) }
   else { u }
 }
 
@@ -91,8 +90,7 @@
 // Apply basic-resume's `resume(...)` show rule.
 //
 // Font override: basic-resume's upstream default ("New Computer Modern")
-// is bundled in `typst-assets::fonts()` (same as `typst-jsonresume-cv`),
-// so we do NOT override it here — the golden stays reproducible across
+// is bundled in `typst-assets::fonts()`, so we do NOT override it here — the golden stays reproducible across
 // hosts without a font-pin patch.
 //
 // CONSTITUTION §5: no other overrides. Iterate when a caller asks.
@@ -118,8 +116,9 @@
 
 // Section: education → `= Education`. basic-resume's `edu` takes
 // `degree` as a single string; compose from JSON Resume `studyType` +
-// `area`. `gpa` ← `score`. JSON Resume has no education-level
-// `location`; default to empty.
+// `area`. JSON Resume has no education-level `location`; default to
+// empty. Upstream `edu()` accepts `gpa` but never prints it, so
+// `score` renders as its own bullet, like `courses`.
 #if "education" in r and r.education != none and r.education.len() > 0 [
   == Education
 
@@ -133,9 +132,12 @@
       institution: e.at("institution", default: ""),
       dates: __fmt_range(e.at("startDate", default: ""), e.at("endDate", default: "")),
       degree: degree,
-      gpa: e.at("score", default: ""),
       location: e.at("location", default: ""),
     )
+    let score = e.at("score", default: "")
+    if score != "" [
+      - GPA: #score
+    ]
     let courses = e.at("courses", default: ())
     if courses.len() > 0 [
       - Courses: #courses.join(", ")

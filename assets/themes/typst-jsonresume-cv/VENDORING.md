@@ -39,10 +39,10 @@ preserved in-tree.
 
 ## Patches applied
 
-Four patches were applied to the upstream theme source to make it
+Six patches were applied to the upstream theme source: four make it
 compile under `ferrocv::render::FerrocvWorld` against arbitrary
-schema-valid JSON Resume documents. All four are recorded below with
-before/after snippets.
+schema-valid JSON Resume documents, two (#5, #6) fix wrong output. All
+six are recorded below.
 
 ### 1. `base.typ`: remove `@preview/scienceicons` import
 
@@ -225,6 +225,41 @@ missing field blank. `tests/optional_fields_cli.rs` renders every
 bundled theme against `render_every_field.json` with each optional
 field dropped in turn and at every date precision.
 
+### 5. `base.typ`: link targets (issue #293)
+
+**Why:** `contact-item` built every link as `link-type + value`, and
+the glue passes full URLs (`basics.url`, profile `url`s), so
+`https://example.com` linked to `https://https://example.com`.
+
+**After:**
+
+```typst
+let target = if value.contains("://") { value } else { link-type + value }
+link(target)[#(prefix + value)]
+```
+
+**Behavioral impact:** the visible text is unchanged; every link
+annotation now targets the source URL (or `mailto:<email>`).
+`tests/adapter_mapping.rs` extracts the annotations and asserts this.
+
+### 6. `resume.typ`: bundled font (issue #293)
+
+**Why:** upstream's `resume(font: "Garamond")` default is not in
+`typst-assets::fonts()`, so Typst silently fell back to Libertinus
+Serif. The glue now passes `font: "Libertinus Serif"` explicitly — the
+font the PDF already embedded — so the choice is visible and no
+longer depends on fallback order.
+
+**Behavioral impact:** none; goldens unchanged.
+
+## Non-schema input: `meta.language`
+
+Upstream switches month names and section titles on `meta.language`
+(`"de"`, `"it"`; anything else, or absent, is English). `meta.language`
+is not a JSON Resume v1.0.0 field and does not follow the `x-`
+convention (CONSTITUTION §1); it is kept as upstream behavior and
+documented in [`docs/adapters.md`](../../../docs/adapters.md).
+
 ## What was NOT patched
 
 - `base.typ` `resume` function signature and behavior — untouched.
@@ -233,7 +268,8 @@ field dropped in turn and at every date precision.
 - Section builders (`work`, `edu`, `projects`,
   `cumulativeCertSkillsInterests`) — untouched apart from the
   `getEduPart` join and the date helpers in patch #4.
-- Multilingual `section_titles` dictionary — untouched.
+- Multilingual `section_titles` dictionary — untouched (see
+  "Non-schema input: `meta.language`" above).
 
 ## Empty-URL safety audit
 
@@ -248,17 +284,18 @@ shared procedure; this section records the outcome for this theme.
 
 ```sh
 $ grep -n "link(" assets/themes/typst-jsonresume-cv/*.typ
-assets/themes/typst-jsonresume-cv/base.typ:152:        link(link-type + value)[#(prefix + value)]
+assets/themes/typst-jsonresume-cv/base.typ:160:        link(target)[#(prefix + value)]
 ```
 
 One and only one `link(...)` call site, inside the `contact-item`
-helper defined at `base.typ:149`:
+helper defined at `base.typ:153`:
 
 ```typst
 let contact-item(value, prefix: "", link-type: "") = {
   if value != "" {
     if link-type != "" {
-      link(link-type + value)[#(prefix + value)]
+      let target = if value.contains("://") { value } else { link-type + value }
+      link(target)[#(prefix + value)]
     } else {
       value
     }

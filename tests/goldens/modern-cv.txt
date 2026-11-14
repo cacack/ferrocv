@@ -2,7 +2,7 @@ Ada   Lovelace
 
 Computing Pioneer London, England
 
-+44-20-0000-0000     ada@example.com
++44-20-0000-0000     ada@example.com     https://example.com/ada     GitHub: ada     LinkedIn: ada-lovelace
 
 Experience
 

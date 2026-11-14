@@ -334,6 +334,13 @@ mechanical copy.
   `profile-picture: none` explicitly so the branch takes the
   no-image layout path. A future caller who wants to supply a real
   profile photo can add a knob; CONSTITUTION §5 defers that.
+- **Contacts and profiles.** Only non-empty contacts enter the
+  `author` dict (modern-cv renders a contact whenever its key exists).
+  `basics.url` → `author.homepage`, linked as-is. `basics.profiles` →
+  `author.custom` entries labelled `<network>: <username>` and linked
+  to the profile's own `url`; the dedicated `github`/`linkedin` keys
+  are not used because they rebuild the link from a hard-coded host
+  (`https://github.com/<x>`), which would not be the source URL.
 - **Certificates drop `issuer` and `url`.** modern-cv's
   `resume-certification` is a two-positional-arg function
   (`certification`, `date`). JSON Resume's `certificates[i].issuer`
