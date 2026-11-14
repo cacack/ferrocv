@@ -42,34 +42,40 @@
 
 // A section: a spaced, letter-tracked bold heading with a full-width
 // rule beneath it, then the section body. The leading space before the
-// heading sets the gap between sections.
+// heading sets the gap between sections. The heading and rule form one
+// `sticky` block, so they always move to the next page together with
+// the start of the section body rather than being stranded as the last
+// line of a page (#290).
 #let section(title, body) = {
   v(14pt)
-  text(weight: "bold", size: 11pt, tracking: 0.4pt)[#upper(title)]
-  v(1pt)
-  line(length: 100%, stroke: 0.5pt)
+  block(sticky: true, width: 100%, {
+    text(weight: "bold", size: 11pt, tracking: 0.4pt)[#upper(title)]
+    v(1pt)
+    line(length: 100%, stroke: 0.5pt)
+  })
   v(3pt)
   body
 }
 
-// Keep a single entry (its header and body) together: wrap it in a
-// non-breakable, full-width block so the title never strands at the
-// bottom of one page with its highlights pushed onto the next. The
-// explicit `width: 100%` is required — a default-width block shrinks to
-// fit its content, which would collapse the `1fr` dates-flush-right
-// grid in `entry_head`.
-#let entry_block(body) = block(breakable: false, width: 100%, body)
+// A single entry (its header and body). The block is breakable so an
+// entry taller than a page flows onto the next one instead of being
+// clipped (#290); the `sticky` header in `entry_head` keeps the title
+// with the first line of its body. The explicit `width: 100%` is
+// required — a default-width block shrinks to fit its content, which
+// would collapse the `1fr` dates-flush-right grid in `entry_head`.
+#let entry_block(body) = block(width: 100%, body)
 
 // An entry header: title (bold) on the left, dates (italic) flush right
-// on the same row. Either side may be absent.
-#let entry_head(title, dates) = {
+// on the same row. Either side may be absent. Sticky, so the header is
+// never the last thing on a page with its body pushed onto the next.
+#let entry_head(title, dates) = block(sticky: true, width: 100%, {
   grid(
     columns: (1fr, auto),
     align: (left, right),
     if title != none { text(weight: "bold")[#title] } else { [] },
     if dates != none { text(style: "italic", size: 9.5pt)[#dates] } else { [] },
   )
-}
+})
 
 // --- Page setup -----------------------------------------------------
 #set page(margin: (x: 0.9in, y: 0.8in), numbering: none)
