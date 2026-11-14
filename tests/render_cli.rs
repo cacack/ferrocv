@@ -25,7 +25,6 @@ use std::path::PathBuf;
 use assert_cmd::Command;
 use predicates::prelude::*;
 
-/// Absolute path to a fixture file by filename stem (no extension).
 /// Stderr holds nothing but `warning: ` lines (#288): the bundled
 /// theme/format pairs that warn must still emit no errors or stray
 /// output.
@@ -33,6 +32,7 @@ fn only_warnings() -> impl Predicate<str> {
     predicate::function(|stderr: &str| stderr.lines().all(|l| l.starts_with("warning: ")))
 }
 
+/// Absolute path to a fixture file by filename stem (no extension).
 fn fixture(name: &str) -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
