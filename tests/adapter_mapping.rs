@@ -78,7 +78,9 @@ fn source_urls(v: &Value, out: &mut Vec<String>) {
 
 /// Given `doc`, when I render it through every adapter, then every link
 /// annotation is exactly a source URL, `mailto:<email>`, or
-/// `tel:<phone>`, and `basics.url` and the email are among them.
+/// `tel:<phone>`, and `basics.url`, the email, every profile URL, and
+/// (where the adapter has the section) the project and certificate URLs
+/// are among them.
 fn assert_links_are_source_urls(doc: &Value) {
     let mut allowed = Vec::new();
     source_urls(doc, &mut allowed);
@@ -87,6 +89,16 @@ fn assert_links_are_source_urls(doc: &Value) {
     let mailto = format!("mailto:{}", basics["email"].as_str().unwrap());
     allowed.push(mailto.clone());
     allowed.push(format!("tel:{}", basics["phone"].as_str().unwrap()));
+    let profile_urls: Vec<String> = basics["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["url"].as_str().unwrap().to_owned())
+        .collect();
+    // Upstream typst-jsonresume-cv links no project or certificate URL,
+    // and modern-cv links no certificate URL.
+    let project = doc["projects"][0]["url"].as_str().unwrap().to_owned();
+    let certificate = doc["certificates"][0]["url"].as_str().unwrap().to_owned();
 
     for theme in ADAPTERS {
         let targets = link_targets(&render_pdf(theme, doc));
@@ -96,7 +108,15 @@ fn assert_links_are_source_urls(doc: &Value) {
                 "{theme}: link target {target:?} is not a source URL; allowed: {allowed:?}"
             );
         }
-        for expected in [&site, &mailto] {
+        let mut expected = vec![site.clone(), mailto.clone()];
+        expected.extend(profile_urls.iter().cloned());
+        if !matches!(*theme, "typst-jsonresume-cv") {
+            expected.push(project.clone());
+        }
+        if matches!(*theme, "fantastic-cv" | "basic-resume") {
+            expected.push(certificate.clone());
+        }
+        for expected in &expected {
             assert!(
                 targets.contains(expected),
                 "{theme}: no link to {expected:?}; got {targets:?}"
