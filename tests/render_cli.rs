@@ -26,6 +26,13 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 /// Absolute path to a fixture file by filename stem (no extension).
+/// Stderr holds nothing but `warning: ` lines (#288): the bundled
+/// theme/format pairs that warn must still emit no errors or stray
+/// output.
+fn only_warnings() -> impl Predicate<str> {
+    predicate::function(|stderr: &str| stderr.lines().all(|l| l.starts_with("warning: ")))
+}
+
 fn fixture(name: &str) -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
@@ -70,9 +77,9 @@ fn render_writes_pdf_to_output_path() {
         .arg(&out)
         .assert()
         .success()
-        // This theme/format pair raises Typst warnings (#288); only
-        // the absence of errors is asserted here.
-        .stderr(predicate::str::contains("error:").not());
+        // This theme/format pair raises Typst warnings (#288); stderr
+        // may carry them, but nothing else.
+        .stderr(only_warnings());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     assert_eq!(
@@ -109,9 +116,9 @@ fn render_accepts_sparse_schema_valid_resume() {
         .arg(&out)
         .assert()
         .success()
-        // This theme/format pair raises Typst warnings (#288); only
-        // the absence of errors is asserted here.
-        .stderr(predicate::str::contains("error:").not());
+        // This theme/format pair raises Typst warnings (#288); stderr
+        // may carry them, but nothing else.
+        .stderr(only_warnings());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     assert_eq!(
@@ -483,9 +490,9 @@ fn render_writes_html_to_output_path() {
         .arg(&out)
         .assert()
         .success()
-        // This theme/format pair raises Typst warnings (#288); only
-        // the absence of errors is asserted here.
-        .stderr(predicate::str::contains("error:").not());
+        // This theme/format pair raises Typst warnings (#288); stderr
+        // may carry them, but nothing else.
+        .stderr(only_warnings());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     let body = std::fs::read_to_string(&out).expect("HTML output must be UTF-8");
@@ -635,9 +642,9 @@ fn render_html_fantastic_cv_happy_path() {
         .arg(&out)
         .assert()
         .success()
-        // This theme/format pair raises Typst warnings (#288); only
-        // the absence of errors is asserted here.
-        .stderr(predicate::str::contains("error:").not());
+        // This theme/format pair raises Typst warnings (#288); stderr
+        // may carry them, but nothing else.
+        .stderr(only_warnings());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     let size = std::fs::metadata(&out).expect("stat").len();
@@ -666,9 +673,9 @@ fn render_html_modern_cv_happy_path() {
         .arg(&out)
         .assert()
         .success()
-        // This theme/format pair raises Typst warnings (#288); only
-        // the absence of errors is asserted here.
-        .stderr(predicate::str::contains("error:").not());
+        // This theme/format pair raises Typst warnings (#288); stderr
+        // may carry them, but nothing else.
+        .stderr(only_warnings());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     let size = std::fs::metadata(&out).expect("stat").len();

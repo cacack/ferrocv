@@ -925,14 +925,12 @@ fn run_render(
     // change the exit code (issue #288).
     let rendered = match format {
         Format::Pdf => compile_theme_resolved(&theme, &value),
-        Format::Text => compile_text_resolved(&theme, &value).map(|r| Rendered {
-            output: r.output.into_bytes(),
-            warnings: r.warnings,
-        }),
-        Format::Html => compile_html_resolved(&theme, &value).map(|r| Rendered {
-            output: r.output.into_bytes(),
-            warnings: r.warnings,
-        }),
+        Format::Text => {
+            compile_text_resolved(&theme, &value).map(|r| r.map_output(String::into_bytes))
+        }
+        Format::Html => {
+            compile_html_resolved(&theme, &value).map(|r| r.map_output(String::into_bytes))
+        }
     };
     let bytes: Vec<u8> = match rendered {
         Ok(Rendered { output, warnings }) => {

@@ -200,11 +200,14 @@ impl fmt::Display for RenderError {
 
 impl std::error::Error for RenderError {}
 
-/// One non-fatal Typst warning, flattened like [`RenderDiagnostic`].
+/// One non-fatal warning, flattened like [`RenderDiagnostic`] (message
+/// only, no source location).
 ///
 /// A warning means compilation succeeded but the output may be
-/// degraded — e.g. glyphs no bundled font covers render as tofu, or a
-/// theme asked for a font family that is not bundled.
+/// degraded — e.g. a theme asked for a font family that is not bundled,
+/// or an exporter dropped content. Most come from the Typst compiler;
+/// the "missing glyphs" warning is synthesized by `ferrocv` and raised
+/// for PDF output only (see the module docs).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderWarning {
     /// Human-readable warning message from the Typst compiler.
@@ -217,15 +220,27 @@ impl fmt::Display for RenderWarning {
     }
 }
 
-/// A successful render: the output plus any non-fatal warnings Typst
-/// raised while producing it.
+/// A successful render: the output plus any non-fatal warnings raised
+/// while producing it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rendered<T> {
     /// The rendered document (PDF bytes, plain text, or HTML).
     pub output: T,
-    /// Warnings in the order Typst reported them; empty for a clean
-    /// render.
+    /// The first occurrence of each distinct warning message, in the
+    /// order Typst reported them, followed (PDF only) by the
+    /// missing-glyphs warning. Typst's HTML-experimental notice is
+    /// dropped. Empty for a clean render.
     pub warnings: Vec<RenderWarning>,
+}
+
+impl<T> Rendered<T> {
+    /// Transform the output, keeping the warnings.
+    pub fn map_output<U>(self, f: impl FnOnce(T) -> U) -> Rendered<U> {
+        Rendered {
+            output: f(self.output),
+            warnings: self.warnings,
+        }
+    }
 }
 
 /// Compile a single Typst source string to PDF bytes, in-process.
@@ -694,6 +709,8 @@ where
 /// enabled. `ferrocv` opts into that flag deliberately and documents the
 /// caveat (module docs, README), so repeating it on each
 /// `--format html` render is noise the user cannot act on; we drop it.
+/// Matched exactly: if a Typst bump rewords it, the
+/// `html_experimental_notice_is_dropped` unit test fails.
 const HTML_EXPERIMENTAL_WARNING: &str = "html export is under active development and incomplete";
 
 /// Flatten Typst's compile warnings into [`RenderWarning`]s.
