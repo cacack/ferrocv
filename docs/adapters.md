@@ -142,13 +142,22 @@ didn't change.
 ## Adapter-specific input
 
 Adapters read the JSON Resume schema (CONSTITUTION §1). One exception
-is inherited from upstream and kept as-is:
+is inherited from upstream and kept deliberately (#323):
 
 - **`typst-jsonresume-cv` reads `meta.language`**, which is not a JSON
   Resume v1.0.0 field. `"de"` and `"it"` switch its section titles and
   month names to German or Italian; any other value, or none, renders
   English. The value is also passed to Typst's `text(lang: ...)`, so
   it should be an ISO 639 code. No other theme reads it.
+
+Why it stays a non-`x-` field rather than moving under `x-`:
+
+- It is upstream adapter behavior, and adapters accept upstream's
+  shape (CONSTITUTION §4).
+- Renaming it would break existing users' input.
+- Only this one adapter reads it; native themes do not.
+
+Any future native-theme localization uses an `x-` field instead.
 
 ## Step-by-step: adding a new adapter
 
