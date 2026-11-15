@@ -293,8 +293,10 @@ that stays identical.
 
 A local `.typ` theme cannot declare which formats it supports, so
 `render` cannot refuse a mismatched pair up front. It still fails
-loudly: PDF or text output with no text at all exits 2, and content the
-format drops (e.g. `align` or `grid` in HTML) prints a `warning:` line.
+loudly: output with no visible text at all (a blank PDF, an empty text
+file, or an HTML `<body>` with nothing to display) exits 2, and content
+the format drops (e.g. `align` or `grid` in HTML) prints a `warning:`
+line.
 
 ## Once it lands
 
