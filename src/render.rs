@@ -156,7 +156,7 @@ pub struct RenderDiagnostic {
 
 impl fmt::Display for RenderDiagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error: {}", self.message)
+        write!(f, "error: {}", EscapeControl(&self.message))
     }
 }
 
@@ -216,7 +216,26 @@ pub struct RenderWarning {
 
 impl fmt::Display for RenderWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "warning: {}", self.message)
+        write!(f, "warning: {}", EscapeControl(&self.message))
+    }
+}
+
+/// Displays a message with every control character (ESC, CR, LF, ...)
+/// escaped as `\u{..}`, so text echoed from a resume or theme cannot
+/// rewrite the terminal it is printed to (#319). Printable characters,
+/// non-ASCII included, pass through unchanged.
+struct EscapeControl<'a>(&'a str);
+
+impl fmt::Display for EscapeControl<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for c in self.0.chars() {
+            if c.is_control() {
+                write!(f, "{}", c.escape_unicode())?;
+            } else {
+                write!(f, "{c}")?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -1318,6 +1337,31 @@ mod tests {
             warnings[0]
         );
         assert!(warnings[0].to_string().starts_with("warning: "));
+    }
+
+    #[test]
+    fn warning_display_escapes_control_characters() {
+        let warning = RenderWarning {
+            message: "a\u{1b}[2J\rb\nc\u{7}".to_owned(),
+        };
+        assert_eq!(warning.to_string(), r"warning: a\u{1b}[2J\u{d}b\u{a}c\u{7}");
+    }
+
+    #[test]
+    fn warning_display_keeps_printable_text_unchanged() {
+        let message = r#"missing glyphs: 山田 (é, ü, "quoted" \ backslash)"#;
+        let warning = RenderWarning {
+            message: message.to_owned(),
+        };
+        assert_eq!(warning.to_string(), format!("warning: {message}"));
+    }
+
+    #[test]
+    fn diagnostic_display_escapes_control_characters() {
+        let diag = RenderDiagnostic {
+            message: "bad\u{1b}]0;title\u{7}".to_owned(),
+        };
+        assert_eq!(diag.to_string(), r"error: bad\u{1b}]0;title\u{7}");
     }
 
     #[test]

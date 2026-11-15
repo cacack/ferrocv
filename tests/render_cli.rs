@@ -1426,6 +1426,37 @@ fn render_cjk_name_with_classic_warns_about_missing_glyphs() {
     assert_eq!(read_prefix(&out, 5), b"%PDF-");
 }
 
+/// Given a resume whose name puts an ANSI escape (ESC) next to CJK
+/// text no bundled font covers, when I render it to PDF with `classic`,
+/// then the missing-glyph warning reaches stderr with the control
+/// character escaped as `\u{1b}`, no raw control byte is written, and
+/// the printable CJK text is unchanged (#319).
+#[test]
+fn render_warning_escapes_control_characters_from_resume_text() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.pdf");
+
+    let assert = ferrocv()
+        .arg("render")
+        .arg("--theme")
+        .arg("classic")
+        .arg("--output")
+        .arg(&out)
+        .write_stdin(r#"{"basics":{"name":"山\u001b[2J田"}}"#)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("warning: missing glyphs"))
+        .stderr(predicate::str::contains(r"\u{1b}"))
+        .stderr(predicate::str::contains("山"));
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).expect("utf-8 stderr");
+    let raw: Vec<char> = stderr
+        .chars()
+        .filter(|c| c.is_control() && *c != '\n')
+        .collect();
+    assert!(raw.is_empty(), "raw control chars on stderr: {raw:?}");
+}
+
 /// Given a local theme that sets a font family ferrocv does not bundle,
 /// when I render with it, then a `warning:` line naming that family goes
 /// to stderr, stdout stays empty, and the exit code is 0.
