@@ -591,7 +591,13 @@ const PARAGRAPH_GAP_EM: f64 = 1.5;
 ///
 /// Adjacent runs that touch (a bold label followed by `: details`)
 /// join directly; runs separated by visible whitespace (a bullet
-/// marker and its text, columns of a row) get one space.
+/// marker and its text, columns of a row) get one space. The test is
+/// on the gap's magnitude: a run that starts more than this far
+/// *before* its predecessor ends overlaps it and is likewise a
+/// separate word. Measured across the shipped themes, runs of one
+/// word abut at |gap| < 0.001em; the only overlaps are distinct
+/// elements (0.47em and up, e.g. `modern-cv`'s date cell overflowing
+/// leftward over a full-width description).
 const WORD_GAP_EM: f64 = 0.15;
 
 /// One text run's position in the compiled document, flattened into
@@ -742,7 +748,8 @@ fn join_line(mut runs: Vec<TextItemPosition>) -> Line {
             };
             let has_space =
                 text.ends_with(char::is_whitespace) || run.text.starts_with(char::is_whitespace);
-            if !has_space && gap > WORD_GAP_EM * run.size_pt.min(prev.size_pt) {
+            // `abs`: overlap separates words too (see `WORD_GAP_EM`).
+            if !has_space && gap.abs() > WORD_GAP_EM * run.size_pt.min(prev.size_pt) {
                 text.push(' ');
             }
         }
@@ -1419,6 +1426,16 @@ mod tests {
             !out.ends_with("\n\n"),
             "extracted text must not end with multiple newlines; got: {out:?}"
         );
+    }
+
+    #[test]
+    fn extract_text_separates_overlapping_runs() {
+        // Negative spacing draws the second run over the first, as
+        // an overflowing right-aligned cell does (#321): they must
+        // read as two words, not one.
+        let out = compile_text_from_source("abc#h(-1em)XYZ", &Value::Object(Default::default()))
+            .expect("source must compile");
+        assert_eq!(out, "abc XYZ\n");
     }
 
     #[test]
