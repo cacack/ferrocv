@@ -812,6 +812,33 @@ fn render_local_theme_with_no_text_is_an_error() {
     }
 }
 
+/// Given a local `.typ` theme whose HTML output has an empty `<body>`,
+/// when I render it with `--format html`, then render exits 2 with the
+/// same no-text error as PDF and text and writes nothing — instead of
+/// an HTML file with nothing to show (issue #320).
+#[test]
+fn render_local_theme_with_empty_html_body_is_an_error() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let out = tmp.path().join("out.html");
+
+    ferrocv()
+        .arg("render")
+        .arg(fixture("render_full"))
+        .arg("--theme")
+        .arg(typ_fixture("no-html-body-theme.typ"))
+        .arg("--format")
+        .arg("html")
+        .arg("--output")
+        .arg(&out)
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "error: the rendered document contains no text; either the resume has \
+             nothing this theme displays, or the theme does not support this format",
+        ));
+    assert!(!out.exists(), "no output file may be written");
+}
+
 /// Given a schema-valid but empty resume (`{}` — JSON Resume requires
 /// no fields), when I render it with a bundled paged theme that prints
 /// nothing for it, then render exits 2 rather than writing a blank PDF

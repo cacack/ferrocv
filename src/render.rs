@@ -117,7 +117,7 @@ use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Feature, Library, LibraryExt, World};
-use typst_html::{HtmlDocument, HtmlOptions};
+use typst_html::{HtmlDocument, HtmlElement, HtmlNode, HtmlOptions};
 use typst_layout::PagedDocument;
 use typst_pdf::PdfOptions;
 
@@ -486,7 +486,7 @@ fn render_world_to_text(world: &FerrocvWorld) -> Result<Rendered<String>, Render
     })
 }
 
-/// Reject a paged render whose pages carry no text at all.
+/// Reject a render that carries no visible text at all.
 ///
 /// A blank PDF or an empty text file is never a useful resume. It means
 /// either the document has nothing this theme displays (JSON Resume
@@ -494,14 +494,16 @@ fn render_world_to_text(world: &FerrocvWorld) -> Result<Rendered<String>, Render
 /// nothing for this format — e.g. an HTML-only theme (`html.*` elements
 /// are ignored in paged export) rendered to PDF or text. Failing here is
 /// what stops a local `.typ` theme, which cannot declare its formats,
-/// from exiting 0 with an empty document (issue #289).
+/// from exiting 0 with an empty document (issue #289). The HTML path
+/// feeds it the document's visible text (issue #320).
 fn require_text(extracted: &str) -> Result<(), RenderError> {
     if extracted.trim().is_empty() {
         return Err(RenderError {
             diagnostics: vec![RenderDiagnostic {
                 message: "the rendered document contains no text; either the resume has \
                           nothing this theme displays, or the theme does not support this \
-                          format (e.g. an HTML-only theme rendered to PDF or text)"
+                          format (e.g. an HTML-only theme rendered to PDF or text, or a \
+                          paged-only theme rendered to HTML)"
                     .to_string(),
             }],
         });
@@ -520,12 +522,42 @@ fn require_text(extracted: &str) -> Result<(), RenderError> {
 fn render_world_to_html(world: &FerrocvWorld) -> Result<Rendered<String>, RenderError> {
     let Warned { output, warnings } = typst::compile::<HtmlDocument>(world);
     let document = output.map_err(diagnostics_to_error)?;
+    let mut visible = String::new();
+    collect_visible_html_text(document.root(), &mut visible);
+    require_text(&visible)?;
     let output =
         typst_html::html(&document, &HtmlOptions::default()).map_err(diagnostics_to_error)?;
     Ok(Rendered {
         output,
         warnings: to_warnings(&warnings),
     })
+}
+
+/// Append the text a browser would display for `element` to `out`.
+///
+/// Walks the compiled DOM rather than the serialized string, so markup,
+/// attributes, and comments never count. `<head>` (the `<title>` lives
+/// there), `<script>`, `<style>`, and `<template>` subtrees are skipped:
+/// none renders as body text. Text inside an embedded SVG frame counts. Feeds [`require_text`] so a theme that
+/// produces no HTML content fails like a blank PDF does (issue #320).
+fn collect_visible_html_text(element: &HtmlElement, out: &mut String) {
+    use typst_html::tag;
+    if [tag::head, tag::script, tag::style, tag::template].contains(&element.tag) {
+        return;
+    }
+    for child in &element.children {
+        match child {
+            HtmlNode::Text(text, _) => out.push_str(text),
+            HtmlNode::Element(child) => collect_visible_html_text(child, out),
+            // Frames embed as inline SVG; their glyphs are visible text.
+            HtmlNode::Frame(frame) => {
+                let mut runs = Vec::new();
+                collect_from_frame(&frame.inner, 0.0, 0.0, &mut runs);
+                runs.iter().for_each(|run| out.push_str(&run.text));
+            }
+            HtmlNode::Tag(_) => {}
+        }
+    }
 }
 
 /// Maximum baseline difference between two text runs, as a fraction
