@@ -101,6 +101,23 @@ fn modern_cv_renders_ada_lovelace_to_expected_text() {
     );
 }
 
+/// Given a project whose description fills the line, when `modern-cv`
+/// renders it as text, then the date cell that overflows leftward over
+/// the description is still a separate word (#321).
+#[test]
+fn modern_cv_separates_description_from_overflowing_date() {
+    let data: Value = serde_json::from_str(
+        &fs::read_to_string(crate_path("tests/fixtures/render_full.json"))
+            .expect("fixture must be readable"),
+    )
+    .expect("fixture must be JSON");
+    let out = render_text("modern-cv", &data);
+    assert!(
+        out.contains("for a computing machine. 1842-01-01"),
+        "description and date must be space-separated; got:\n{out}"
+    );
+}
+
 /// Two work entries, the first with a summary long enough to wrap and
 /// two highlights — the shapes issue #292's line grouping must keep
 /// apart from section and entry breaks.
