@@ -230,6 +230,11 @@ than writing a gutted file: page-layout themes lose their headers in
 Typst's HTML export, and `html-minimal` renders blank pages in PDF and
 text.
 
+Themes read JSON Resume fields and `x-` extensions, with one deliberate
+exception: the `typst-jsonresume-cv` adapter also reads `meta.language`
+(`"de"` or `"it"` localizes it); see
+[`docs/adapters.md`](docs/adapters.md#adapter-specific-input).
+
 `themes new <name>` scaffolds a starter native theme to author your own.
 It writes a new `<name>/` directory (in the current directory, or under
 `--out <dir>`) containing a ready-to-edit `resume.typ` and a `golden.txt`

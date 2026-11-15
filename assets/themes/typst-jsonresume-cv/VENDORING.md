@@ -257,8 +257,9 @@ longer depends on fallback order.
 Upstream switches month names and section titles on `meta.language`
 (`"de"`, `"it"`; anything else, or absent, is English). `meta.language`
 is not a JSON Resume v1.0.0 field and does not follow the `x-`
-convention (CONSTITUTION §1); it is kept as upstream behavior and
-documented in [`docs/adapters.md`](../../../docs/adapters.md).
+convention (CONSTITUTION §1); it is kept deliberately as upstream
+behavior (#323). The decision and its reason are recorded in
+[`docs/adapters.md`](../../../docs/adapters.md#adapter-specific-input).
 
 ## What was NOT patched
 
