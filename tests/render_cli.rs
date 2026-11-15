@@ -25,9 +25,9 @@ use std::path::PathBuf;
 use assert_cmd::Command;
 use predicates::prelude::*;
 
-/// Stderr holds nothing but `warning: ` lines (#288): the bundled
+/// Stderr holds nothing but `warning: ` lines (#288): the few bundled
 /// theme/format pairs that warn must still emit no errors or stray
-/// output.
+/// output. Every other pair asserts empty stderr.
 fn only_warnings() -> impl Predicate<str> {
     predicate::function(|stderr: &str| stderr.lines().all(|l| l.starts_with("warning: ")))
 }
@@ -77,9 +77,7 @@ fn render_writes_pdf_to_output_path() {
         .arg(&out)
         .assert()
         .success()
-        // This theme/format pair raises Typst warnings (#288); stderr
-        // may carry them, but nothing else.
-        .stderr(only_warnings());
+        .stderr(predicate::str::is_empty());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     assert_eq!(
@@ -116,9 +114,7 @@ fn render_accepts_sparse_schema_valid_resume() {
         .arg(&out)
         .assert()
         .success()
-        // This theme/format pair raises Typst warnings (#288); stderr
-        // may carry them, but nothing else.
-        .stderr(only_warnings());
+        .stderr(predicate::str::is_empty());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
     assert_eq!(
@@ -490,8 +486,9 @@ fn render_writes_html_to_output_path() {
         .arg(&out)
         .assert()
         .success()
-        // This theme/format pair raises Typst warnings (#288); stderr
-        // may carry them, but nothing else.
+        // `text-minimal` sets a `page` rule, which Typst's HTML export
+        // ignores with a warning (#288); stderr may carry it, but
+        // nothing else.
         .stderr(only_warnings());
 
     assert!(out.exists(), "output file must exist at {}", out.display());
@@ -695,7 +692,14 @@ fn render_every_theme_format_pair_is_complete_or_rejected() {
             let pair = format!("{} --format {format}", theme.name);
 
             if theme.formats.contains(&format) {
-                assert.success().stderr(only_warnings());
+                // Every supported pair renders silently except
+                // `text-minimal` to HTML, whose `page` rule Typst's HTML
+                // export ignores with a warning (#288).
+                if theme.name == "text-minimal" && format == Format::Html {
+                    assert.success().stderr(only_warnings());
+                } else {
+                    assert.success().stderr(predicate::str::is_empty());
+                }
                 let text = visible_text(format, &out);
                 for name in &names {
                     assert!(
