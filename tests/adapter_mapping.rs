@@ -142,6 +142,20 @@ fn every_adapter_links_http_urls_unchanged() {
     assert_links_are_source_urls(&doc);
 }
 
+/// A URL carrying another URL in its query (issue #322) must link to
+/// itself exactly: scheme detection is anchored to the start, so the
+/// nested `://` neither suppresses nor duplicates the scheme.
+#[test]
+fn every_adapter_links_nested_urls_unchanged() {
+    let nested = "https://example.com/r?to=https://x";
+    let mut doc = full_fixture();
+    doc["basics"]["url"] = json!(nested);
+    doc["basics"]["profiles"][0]["url"] = json!(format!("{nested}&p=gh"));
+    doc["projects"][0]["url"] = json!(format!("{nested}&p=proj"));
+    doc["certificates"][0]["url"] = json!(format!("{nested}&p=cert"));
+    assert_links_are_source_urls(&doc);
+}
+
 /// Given `basics.url` and GitHub/LinkedIn profiles, when I render
 /// through `modern-cv`, then the contact line shows all three.
 #[test]

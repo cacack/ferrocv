@@ -6,9 +6,10 @@
 
 // ferrocv patch (link targets): upstream hard-coded an `https://` prefix
 // on every URL link, rewriting an `http://` URL to `https://`. Prepend
-// the scheme only when the value does not already carry one. See
-// VENDORING.md → Patches applied.
-#let __href(scheme, value) = if value.contains("://") { value } else { scheme + value }
+// the scheme only when the value does not already carry one; the check
+// is anchored to the start so a URL nested in a query string (issue
+// #322) is not mistaken for one. See VENDORING.md → Patches applied.
+#let __href(scheme, value) = if value.starts-with(regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")) { value } else { scheme + value }
 
 #let resume(
   author: "",

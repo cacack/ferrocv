@@ -91,12 +91,12 @@ re-vendor becomes a byte-for-byte copy and this patch can be retired.
 as `"https://" + value` (`contact-item(..., link-type: "https://")`
 and the `project`/`certificates` helpers), so an `http://` URL was
 rewritten to `https://`. A `__href(scheme, value)` helper now prepends
-the scheme only when `value` does not already contain `://`, and every
+the scheme only when `value` does not already start with one, and every
 such call site goes through it:
 
 ```typst
 // after patching
-#let __href(scheme, value) = if value.contains("://") { value } else { scheme + value }
+#let __href(scheme, value) = if value.starts-with(regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")) { value } else { scheme + value }
 link(__href(link-type, value))[#(prefix + value)]   // contact-item
 link(__href("https://", url))[#url]                  // project, certificates
 ```
@@ -104,6 +104,18 @@ link(__href("https://", url))[#url]                  // project, certificates
 Scheme-less values link exactly as before; a value with a scheme links
 to itself. Every link annotation in the PDF is now the source URL (or
 `mailto:<email>`), pinned by `tests/adapter_mapping.rs`.
+
+**One scheme-anchoring patch** (issue #322): the #293 helper first
+tested `value.contains("://")`, which is not anchored to the start.
+The glue strips `https://` for display, so
+`https://example.com/r?to=https://x` reached `__href` as
+`example.com/r?to=https://x`; the nested `://` read as a scheme and the
+link targeted the scheme-less remainder. The test is now
+`value.starts-with(regex("^[a-zA-Z][a-zA-Z0-9+.-]*://"))` (an RFC 3986
+scheme followed by `://`, at the start only), shown above. Display text
+is unchanged; such a URL now links to itself, pinned by
+`every_adapter_links_nested_urls_unchanged` in
+`tests/adapter_mapping.rs`.
 
 ## Empty-URL safety audit
 
@@ -113,11 +125,11 @@ Per the [shared checklist](../VENDORING_CHECKLIST.md) §2, every
 
 | Line | Call                                  | Guarded by                                  |
 | ---- | ------------------------------------- | ------------------------------------------- |
-| 89   | `link(__href(link-type, value))`      | `if value != ""` in `contact-item` (L87)    |
-| 208  | `link(__href("https://", url))`       | `if url != "" and dates != ""`              |
-| 210  | `link(__href("https://", url))`       | `if url != "" and dates != ""`              |
-| 215  | `link(__href("https://", url))`       | `if dates == "" and url != ""`              |
-| 232  | `link(__href("https://", url))`       | `if url != ""` in `certificates`            |
+| 90   | `link(__href(link-type, value))`      | `if value != ""` in `contact-item` (L88)    |
+| 209  | `link(__href("https://", url))`       | `if url != "" and dates != ""`              |
+| 211  | `link(__href("https://", url))`       | `if url != "" and dates != ""`              |
+| 216  | `link(__href("https://", url))`       | `if dates == "" and url != ""`              |
+| 233  | `link(__href("https://", url))`       | `if url != ""` in `certificates`            |
 
 All five sites are guarded; no empty-URL patch is required. The
 sparse-fixture regression test

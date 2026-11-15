@@ -39,10 +39,10 @@ preserved in-tree.
 
 ## Patches applied
 
-Six patches were applied to the upstream theme source: four make it
+Seven patches were applied to the upstream theme source: four make it
 compile under `ferrocv::render::FerrocvWorld` against arbitrary
-schema-valid JSON Resume documents, two (#5, #6) fix wrong output. All
-six are recorded below.
+schema-valid JSON Resume documents, three (#5–#7) fix wrong output. All
+seven are recorded below.
 
 ### 1. `base.typ`: remove `@preview/scienceicons` import
 
@@ -234,7 +234,7 @@ the glue passes full URLs (`basics.url`, profile `url`s), so
 **After:**
 
 ```typst
-let target = if value.contains("://") { value } else { link-type + value }
+let target = if value.starts-with(regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")) { value } else { link-type + value }
 link(target)[#(prefix + value)]
 ```
 
@@ -251,6 +251,29 @@ font the PDF already embedded — so the choice is visible and no
 longer depends on fallback order.
 
 **Behavioral impact:** none; goldens unchanged.
+
+### 7. `base.typ`: anchor scheme detection (issue #322)
+
+**Why:** patch #5 tested `value.contains("://")`, which is not anchored
+to the start, so a value whose only `://` sits in a query string (e.g.
+`example.com/r?to=https://x`) was taken to carry a scheme and linked
+without one.
+
+**After:** the snippet under #5 and the empty-URL audit below now read
+
+```typst
+let target = if value.starts-with(regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")) { value } else { link-type + value }
+```
+
+— an RFC 3986 scheme followed by `://`, at the start only.
+
+**Behavioral impact:** none for the URLs the glue passes today: they
+are schema-validated `uri`s and reach `contact-item` unstripped, so
+they already started with their scheme. The patch keeps the check
+identical to `basic-resume`'s, where the bug was reachable.
+`every_adapter_links_nested_urls_unchanged` in
+`tests/adapter_mapping.rs` pins `https://example.com/r?to=https://x`
+linking to itself.
 
 ## Non-schema input: `meta.language`
 
@@ -285,7 +308,7 @@ shared procedure; this section records the outcome for this theme.
 
 ```sh
 $ grep -n "link(" assets/themes/typst-jsonresume-cv/*.typ
-assets/themes/typst-jsonresume-cv/base.typ:160:        link(target)[#(prefix + value)]
+assets/themes/typst-jsonresume-cv/base.typ:162:        link(target)[#(prefix + value)]
 ```
 
 One and only one `link(...)` call site, inside the `contact-item`
@@ -295,7 +318,7 @@ helper defined at `base.typ:153`:
 let contact-item(value, prefix: "", link-type: "") = {
   if value != "" {
     if link-type != "" {
-      let target = if value.contains("://") { value } else { link-type + value }
+      let target = if value.starts-with(regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")) { value } else { link-type + value }
       link(target)[#(prefix + value)]
     } else {
       value
