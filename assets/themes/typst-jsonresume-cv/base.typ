@@ -155,8 +155,10 @@
       if link-type != "" {
         // ferrocv vendor patch (link targets): upstream always prepended
         // `link-type`, so a full URL became `https://https://...`. Keep
-        // a value that already carries a scheme as-is. See VENDORING.md.
-        let target = if value.contains("://") { value } else { link-type + value }
+        // a value that already carries a scheme as-is, matched only at
+        // the start (a nested URL in a query is not a scheme; #322).
+        // See VENDORING.md.
+        let target = if value.starts-with(regex("^[a-zA-Z][a-zA-Z0-9+.-]*://")) { value } else { link-type + value }
         link(target)[#(prefix + value)]
       } else {
         value
